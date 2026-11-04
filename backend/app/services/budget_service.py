@@ -315,7 +315,8 @@ async def get_budget_vs_actual(
         spending_map[cat_id] = spending_map.get(cat_id, Decimal("0")) + Decimal(str(total))
 
     # Add projected recurring transactions for this month (converted to primary currency)
-    projections = await _get_recurring_projections(session, workspace_id, month_start, month_end)
+    projections = await _get_recurring_projections(session, workspace_id, month_start, month_end,
+                                                  personal_only=True)
     for proj in projections:
         if proj["type"] != "debit" or not proj["category_id"]:
             continue
@@ -375,7 +376,8 @@ async def get_budget_vs_actual(
         prev_spending_map[cat_id] = prev_spending_map.get(cat_id, Decimal("0")) + Decimal(str(total))
 
     # Add projected recurring transactions for previous month (converted to primary currency)
-    prev_projections = await _get_recurring_projections(session, workspace_id, prev_month_start, prev_month_end)
+    prev_projections = await _get_recurring_projections(session, workspace_id, prev_month_start, prev_month_end,
+                                                       personal_only=True)
     for proj in prev_projections:
         if proj["type"] != "debit" or not proj["category_id"]:
             continue

@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
+from app.schemas.business_income import IncomeAdjustment
 
 
 class AccountBase(BaseModel):
@@ -92,6 +93,8 @@ class CreditCardBillRead(BaseModel):
 
 
 class AccountSummary(BaseModel):
+    income_adjustment: Optional[IncomeAdjustment] = None
+    personal_expenses: Optional[float] = None
     account_id: uuid.UUID
     current_balance: float
     monthly_income: float

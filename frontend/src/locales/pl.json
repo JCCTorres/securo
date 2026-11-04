@@ -938,6 +938,8 @@
     "confirmOverwriteImport": "Overwrite and import"
   },
   "categories": {
+    "business": "Firmowe",
+    "businessDesc": "Wyklucza kwalifikujące się koszty firmowe z wydatków osobistych i pomniejsza dochód osobisty o koszt netto w tym samym miesiącu sprawozdawczym (obciążenia firmowe minus zwroty i refundacje firmowe, przy minimalnym odliczeniu równym zero). Wpływy firmowe nie są dochodem osobistym i kompensują koszt tylko raz. Oczekujące transakcje nie pomniejszają zrealizowanego dochodu. Odznacz, aby cofnąć tę korektę; salda bankowe i transakcje pozostaną bez zmian.",
     "title": "Kategorie",
     "addCategory": "Dodaj kategorię",
     "editCategory": "Edytuj kategorię",
@@ -1197,6 +1199,10 @@
     "regenerate": "Przelicz ponownie"
   },
   "reports": {
+    "business": "Business",
+    "grossIncome": "Dochód brutto",
+    "businessDeduction": "Odliczenie Business",
+    "netPersonalIncome": "Osobisty dochód netto",
     "section": "Analityka",
     "netWorth": "Majątek netto",
     "trend": "W czasie",
@@ -1316,6 +1322,28 @@
     "deleteConfirm": "Czy na pewno chcesz usunąć tego odbiorcę? Usunie to również odbiorcę ze wszystkich powiązanych transakcji.",
     "deleteMultipleTitle": "Usuń odbiorców",
     "deleteMultipleConfirm": "Czy na pewno chcesz usunąć {{count}} wybranych odbiorców? Usunie to ich również ze wszystkich powiązanych transakcji."
+  },
+  "incomeBridge": {
+    "missingFxEntry": "Brak potwierdzonego kursu. Oryginalna kwota bankowa pozostaje bez zmian; kwota po przeliczeniu nie jest wyświetlana.",
+    "title": "Uzgodnienie dochodu osobistego",
+    "booked": "Zaksięgowane wpływy",
+    "projected": "Prognozowany dochód (nieotrzymany)",
+    "gross": "Dochód brutto",
+    "business": "Odliczenie Business",
+    "net": "Osobisty dochód netto",
+    "businessGroup": "Business",
+    "explanation": "Kategorie Business wyłączają koszty z wydatków osobistych i odejmują od dochodu koszty miesiąca pomniejszone o zwroty (minimalne odliczenie: zero). To nie jest transakcja bankowa; salda nie zmieniają się.",
+    "forecast": "Prognozowany dochód nie został otrzymany. Jest oddzielony od rzeczywistych transakcji i uwzględniony w łącznym dochodzie.",
+    "forecastUnknown": "Serwer nie podaje podziału na wpływy i prognozy. Dochodu brutto nie należy traktować jako otrzymanego.",
+    "missingFx": "Częściowe przeliczenie Business: {{count}} pozycji bez potwierdzonego kursu wykluczono z odliczenia. Nie zakłada się kursu 1:1.",
+    "rows": "Wyświetlono {{shown}} z {{count}} rzeczywistych transakcji",
+    "bookedNet": "Zaksięgowany dochód netto po Business, przed prognozami.",
+    "actualTotal": "Suma tylko rzeczywistych transakcji; bez prognoz.",
+    "pagination": "Suma obejmuje wszystkie pasujące transakcje, nie tylko wyświetloną stronę.",
+    "reportNet": "Wynik netto raportu dodatkowo odejmuje wydatki osobiste. Struktura pokazuje dochód brutto wraz z ujawnionymi prognozami; Business jest oddzielony od wydatków i inwestycji.",
+    "fundingDeficit": "Luka finansowania",
+    "fundingNote": "Wypływy przekraczają dochód brutto. Luka nie jest dochodem ani inwestycją; źródło finansowania nie jest zakładane.",
+    "refundReversal": "Odwrócenie Business przez zwrot (ze znakiem; poza wykresem kołowym)"
   },
   "common": {
     "view": "Zobacz",

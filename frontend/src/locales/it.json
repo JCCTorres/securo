@@ -884,6 +884,8 @@
     "confirmOverwriteImport": "Overwrite and import"
   },
   "categories": {
+    "business": "Aziendale",
+    "businessDesc": "Esclude i costi aziendali idonei dalle spese personali e riduce il reddito personale del costo netto nello stesso mese di riferimento (addebiti aziendali meno rimborsi aziendali, con una deduzione minima pari a zero). Gli accrediti aziendali sono esclusi dal reddito personale e compensano il costo una sola volta. Le transazioni in sospeso non riducono il reddito realizzato. Deseleziona per annullare questa rettifica; i saldi bancari e le transazioni restano invariati.",
     "title": "Categorie",
     "addCategory": "Aggiungi categoria",
     "editCategory": "Modifica categoria",
@@ -1128,6 +1130,10 @@
     "regenerate": "Rigenera"
   },
   "reports": {
+    "business": "Business",
+    "grossIncome": "Reddito lordo",
+    "businessDeduction": "Deduzione Business",
+    "netPersonalIncome": "Reddito personale netto",
     "section": "Analisi",
     "netWorth": "Patrimonio netto",
     "trend": "Nel tempo",
@@ -1241,6 +1247,28 @@
     "deleteConfirm": "Sei sicuro di voler eliminare questo beneficiario? Questo lo rimuoverà anche da tutte le transazioni associate.",
     "deleteMultipleTitle": "Elimina beneficiari",
     "deleteMultipleConfirm": "Sei sicuro di voler eliminare i {{count}} beneficiari selezionati? Questo li rimuoverà anche da tutte le transazioni associate."
+  },
+  "incomeBridge": {
+    "missingFxEntry": "Cambio verificato non disponibile. L’importo bancario originale resta invariato; l’importo convertito non viene mostrato.",
+    "title": "Riconciliazione del reddito personale",
+    "booked": "Incassi registrati",
+    "projected": "Reddito previsto (non ricevuto)",
+    "gross": "Reddito lordo",
+    "business": "Deduzione Business",
+    "net": "Reddito personale netto",
+    "businessGroup": "Business",
+    "explanation": "Le categorie Business escludono i costi dalle spese personali e deducono dal reddito i costi del mese meno i rimborsi (deduzione minima: zero). Non è un movimento bancario; i saldi restano invariati.",
+    "forecast": "Il reddito previsto non è denaro ricevuto. È separato dalle transazioni reali e incluso nel reddito totale.",
+    "forecastUnknown": "Questo server non distingue incassi e previsioni. Il reddito lordo non va considerato denaro ricevuto.",
+    "missingFx": "Conversione Business parziale: {{count}} movimenti senza cambio verificato sono esclusi dalla deduzione. Non si presume una conversione 1:1.",
+    "rows": "{{shown}} di {{count}} transazioni reali visualizzate",
+    "bookedNet": "Reddito netto registrato, dopo Business e prima delle previsioni.",
+    "actualTotal": "Totale delle sole transazioni reali; previsioni escluse.",
+    "pagination": "Il totale comprende tutte le transazioni corrispondenti, non solo la pagina mostrata.",
+    "reportNet": "Il risultato netto del rapporto sottrae anche le spese personali. La composizione mostra il reddito lordo, incluse le previsioni indicate; Business è separato da spese e investimenti.",
+    "fundingDeficit": "Deficit di finanziamento",
+    "fundingNote": "Le uscite superano il reddito lordo. Il divario non è reddito né investimento; la fonte di finanziamento non viene presunta.",
+    "refundReversal": "Storno per rimborso Business (con segno; fuori dal grafico a torta)"
   },
   "common": {
     "view": "Visualizza",

@@ -39,5 +39,8 @@ class Category(Base):
     # for income/expense calculations.
     is_ignored: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
+    # Explicit managerial income adjustment; never inferred from the name.
+    is_business: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
     user: Mapped["User"] = relationship(back_populates="categories")
     group: Mapped[Optional["CategoryGroup"]] = relationship(back_populates="categories")

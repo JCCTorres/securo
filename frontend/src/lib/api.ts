@@ -8,6 +8,8 @@ import type {
   PasskeyOptionsResponse,
   AppSetting,
   Category,
+  CategoryCreate,
+  CategoryUpdate,
   CategoryGroup,
   BankConnection,
   ConnectionSettings,
@@ -257,11 +259,11 @@ export const categories = {
     const { data } = await api.get('/categories')
     return data
   },
-  create: async (category: Partial<Category>): Promise<Category> => {
+  create: async (category: CategoryCreate): Promise<Category> => {
     const { data } = await api.post('/categories', category)
     return data
   },
-  update: async (id: string, category: Partial<Category>): Promise<Category> => {
+  update: async (id: string, category: CategoryUpdate): Promise<Category> => {
     const { data } = await api.patch(`/categories/${id}`, category)
     return data
   },

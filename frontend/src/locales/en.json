@@ -884,6 +884,8 @@
     "confirmOverwriteImport": "Overwrite and import"
   },
   "categories": {
+    "business": "Business",
+    "businessDesc": "Exclude eligible business costs from personal expenses and reduce personal income by the net cost in the same reporting month (business debits minus business refunds/reimbursements, with a minimum deduction of zero). Business credits are excluded from personal income and offset the cost only once. Pending transactions do not reduce realized income. Uncheck to reverse this adjustment; bank balances and transactions stay unchanged.",
     "title": "Categories",
     "addCategory": "Add Category",
     "editCategory": "Edit Category",
@@ -1128,6 +1130,10 @@
     "regenerate": "Regenerate"
   },
   "reports": {
+    "business": "Business",
+    "grossIncome": "Gross income",
+    "businessDeduction": "Business deduction",
+    "netPersonalIncome": "Net personal income",
     "section": "Analytics",
     "netWorth": "Net Worth",
     "trend": "Over Time",
@@ -1241,6 +1247,28 @@
     "deleteMultipleTitle": "Delete Payees",
     "deleteMultipleConfirm": "Are you sure you want to delete the {{count}} selected payees? This will also remove them from any associated transactions.",
     "deletedMultiple": "{{count}} payees deleted"
+  },
+  "incomeBridge": {
+    "missingFxEntry": "Verified exchange rate unavailable. The original bank amount is unchanged; its converted amount is not shown.",
+    "title": "Personal income reconciliation",
+    "booked": "Booked receipts",
+    "projected": "Projected income (not received)",
+    "gross": "Gross income",
+    "business": "Business deduction",
+    "net": "Net personal income",
+    "businessGroup": "Business",
+    "explanation": "Business categories exclude costs from personal expenses and deduct same-month costs less refunds from income (minimum deduction: zero). This is not a bank transaction; balances are unchanged.",
+    "forecast": "Forecast income is not received money. It is shown separately from real transactions and included in the income total.",
+    "forecastUnknown": "This server does not disclose the booked/forecast split. Gross income must not be assumed to be received money.",
+    "missingFx": "Partial Business conversion: {{count}} entries lack verified exchange rates and are excluded from the deduction. No 1:1 conversion is assumed.",
+    "rows": "Showing {{shown}} of {{count}} real transactions",
+    "bookedNet": "Booked net income, after Business and before forecasts.",
+    "actualTotal": "Total for real transactions only; forecasts are excluded.",
+    "pagination": "The total covers all matching transactions, not just the displayed page.",
+    "reportNet": "Report net income additionally subtracts personal expenses. Category composition shows gross income, including disclosed forecasts; Business is separate from spending and investments.",
+    "fundingDeficit": "Funding deficit",
+    "fundingNote": "Outflows exceed gross income. This gap is not income or an investment; its funding source is not inferred.",
+    "refundReversal": "Business refund reversal (signed; not a pie slice)"
   },
   "common": {
     "view": "View",

@@ -334,6 +334,9 @@ async def test_get_transactions_user_pnl_only_returns_only_dashboard_reportable_
 ):
     from app.models.category import Category
 
+    # These USD eligibility fixtures require a USD viewer, not missing FX as 1:1.
+    test_user.preferences = {"currency_display": "USD"}
+
     ignored = Category(
         id=uuid.uuid4(),
         user_id=test_user.id,
