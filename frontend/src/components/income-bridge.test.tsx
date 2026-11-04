@@ -47,6 +47,7 @@ describe('IncomeBridge actual rendering', () => {
 })
 
 describe('CashflowSankey actual accessible rendering', () => {
+  // ICU versions differ on compact USD's trailing .0; keep exact numeric values.
   const items: ReportCompositionItem[] = [
     { key: 'salary', label: 'Sample salary', group: 'income', value: 1000, color: '#000' },
     { key: 'business-deduction', label: 'Business', group: 'business', value: 800, color: '#000' },
@@ -56,20 +57,20 @@ describe('CashflowSankey actual accessible rendering', () => {
   const chart = (composition: ReportCompositionItem[]) => renderToStaticMarkup(<I18nextProvider i18n={i18n}><CashflowSankey composition={composition} currency="USD" locale="en-US" /></I18nextProvider>)
   it('renders independent business, true investments and explicit funding gap even before layout', () => {
     const html = chart(items)
-    expect(html).toContain('<td>Business</td><td>$800</td>')
-    expect(html).toContain('<td>True investment</td><td>$200</td>')
-    expect(html).toContain('<td>Funding deficit</td><td>$300</td>')
+    expect(html).toMatch(/<td>Business<\/td><td>\$800(?:\.0)?<\/td>/)
+    expect(html).toMatch(/<td>True investment<\/td><td>\$200(?:\.0)?<\/td>/)
+    expect(html).toMatch(/<td>Funding deficit<\/td><td>\$300(?:\.0)?<\/td>/)
     expect(html).toContain('its funding source is not inferred')
     expect(html).not.toContain('<td>Business</td><td>$0</td>')
   })
   it('retains a business-only negative-income case', () => {
     const html = chart([items[1]])
-    expect(html).toContain('<td>Business</td><td>$800</td>')
-    expect(html).toContain('<td>Funding deficit</td><td>$800</td>')
+    expect(html).toMatch(/<td>Business<\/td><td>\$800(?:\.0)?<\/td>/)
+    expect(html).toMatch(/<td>Funding deficit<\/td><td>\$800(?:\.0)?<\/td>/)
   })
   it('shows only the true residual after all outflows, not net income as gross', () => {
     const html = chart(items.map(c => c.group === 'business' ? { ...c, value: 150 } : c))
-    expect(html).toContain('<td>Surplus</td><td>$350</td>')
+    expect(html).toMatch(/<td>Surplus<\/td><td>\$350(?:\.0)?<\/td>/)
     expect(html).not.toContain('<td>Funding deficit</td>')
   })
 })

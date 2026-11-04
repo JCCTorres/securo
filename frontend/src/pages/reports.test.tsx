@@ -63,9 +63,10 @@ describe('Business report integration rendering', () => {
   it('renders the Money Map from gross categories, business once, and actual investments', () => {
     harness.tab = 'money_map'
     const html = render()
-    expect(html).toContain('<td>Business</td><td>$150</td>')
-    expect(html).toContain('<td>True investment</td><td>$200</td>')
-    expect(html).toContain('<td>Surplus</td><td>$650</td>')
+    // Compact-number ICU formatting may retain .0; amounts must still be exact.
+    expect(html).toMatch(/<td>Business<\/td><td>\$150(?:\.0)?<\/td>/)
+    expect(html).toMatch(/<td>True investment<\/td><td>\$200(?:\.0)?<\/td>/)
+    expect(html).toMatch(/<td>Surplus<\/td><td>\$650(?:\.0)?<\/td>/)
   })
   it('accepts an old-server report without new metadata', () => {
     harness.data!.meta.income_adjustment = undefined
