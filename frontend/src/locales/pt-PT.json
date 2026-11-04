@@ -884,6 +884,8 @@
     "confirmOverwriteImport": "Overwrite and import"
   },
   "categories": {
+    "business": "Empresarial",
+    "businessDesc": "Exclui os custos empresariais elegíveis das despesas pessoais e reduz o rendimento pessoal pelo custo líquido no mesmo mês de referência (débitos empresariais menos devoluções/reembolsos empresariais, com dedução mínima de zero). Os créditos empresariais são excluídos do rendimento pessoal e compensam o custo apenas uma vez. Transações pendentes não reduzem o rendimento realizado. Desmarca para reverter este ajuste; os saldos bancários e as transações permanecem inalterados.",
     "title": "Categorias",
     "addCategory": "Adicionar Categoria",
     "editCategory": "Editar Categoria",
@@ -1128,6 +1130,10 @@
     "regenerate": "Regenerar"
   },
   "reports": {
+    "business": "Business",
+    "grossIncome": "Rendimento bruto",
+    "businessDeduction": "Dedução Business",
+    "netPersonalIncome": "Rendimento pessoal líquido",
     "section": "Análises",
     "netWorth": "Património Líquido",
     "trend": "Ao Longo do Tempo",
@@ -1241,6 +1247,28 @@
     "deleteConfirm": "Tem a certeza que deseja eliminar este beneficiário? Isto também o irá remover de quaisquer transações associadas.",
     "deleteMultipleTitle": "Eliminar beneficiários",
     "deleteMultipleConfirm": "Tem a certeza que deseja eliminar os {{count}} beneficiários selecionados? Isto também os irá remover de quaisquer transações associadas."
+  },
+  "incomeBridge": {
+    "missingFxEntry": "Câmbio verificado indisponível. O montante bancário original não muda; o montante convertido não é apresentado.",
+    "title": "Composição do rendimento pessoal",
+    "booked": "Recebimentos registados",
+    "projected": "Rendimento projetado (não recebido)",
+    "gross": "Rendimento bruto",
+    "business": "Dedução Business",
+    "net": "Rendimento pessoal líquido",
+    "businessGroup": "Business",
+    "explanation": "As categorias Business excluem custos das despesas pessoais e deduzem do rendimento os custos do mês menos reembolsos (dedução mínima: zero). Não é uma transação bancária; os saldos não mudam.",
+    "forecast": "O rendimento projetado não é dinheiro recebido. É apresentado separadamente das transações reais e incluído no rendimento total.",
+    "forecastUnknown": "Este servidor não informa a divisão entre recebimentos e projeções. O rendimento bruto não deve ser considerado dinheiro recebido.",
+    "missingFx": "Conversão Business parcial: {{count}} movimentos sem câmbio verificado foram excluídos da dedução. Não se presume conversão 1:1.",
+    "rows": "A mostrar {{shown}} de {{count}} transações reais",
+    "bookedNet": "Rendimento líquido registado, após Business e antes das projeções.",
+    "actualTotal": "Total apenas das transações reais; projeções excluídas.",
+    "pagination": "O total abrange todas as transações correspondentes, não apenas a página apresentada.",
+    "reportNet": "O resultado líquido do relatório também desconta despesas pessoais. A composição mostra rendimento bruto, incluindo as projeções indicadas; Business fica separado das despesas e investimentos.",
+    "fundingDeficit": "Défice de financiamento",
+    "fundingNote": "As saídas excedem o rendimento bruto. A diferença não é rendimento nem investimento; a sua origem de financiamento não é presumida.",
+    "refundReversal": "Reversão por reembolso Business (com sinal; fora do gráfico circular)"
   },
   "common": {
     "view": "Ver",

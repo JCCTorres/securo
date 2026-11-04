@@ -7,6 +7,7 @@ import {
 } from 'd3-sankey'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import type { ReportCompositionItem } from '@/types'
+import { BUSINESS_COLOR, cashflowTotals } from '@/lib/income-presentation'
 
 // Colour carries MEANING, not category identity: green = money in, red = money
 // out, gray = uncategorised/folded. Tinting by category (the old approach) made
@@ -19,7 +20,7 @@ const EXPENSE_COLOR = '#F43F5E' // rose — money out
 const INVEST_COLOR = '#0EA5E9' // sky blue — money set aside (investments)
 const CENTER_COLOR = '#059669' // deeper emerald — the cash-flow hub
 const SURPLUS_COLOR = '#10B981' // emerald — leftover income
-const DEFICIT_COLOR = '#F59E0B' // amber — overspend drawn from reserves
+const DEFICIT_COLOR = '#F59E0B' // amber — funding gap, source is not inferred
 const NEUTRAL_COLOR = '#9CA3AF' // gray — uncategorised / folded long tail
 
 // Keep the diagram legible: personal-finance Sankeys read best at ~a dozen
@@ -37,7 +38,7 @@ interface SankeyNodeDatum {
   id: string
   name: string
   color: string
-  side: 'income' | 'center' | 'expense' | 'investment'
+  side: 'income' | 'funding' | 'center' | 'expense' | 'business' | 'investment'
 }
 
 interface SankeyLinkDatum {
@@ -52,6 +53,7 @@ interface SankeyLinkDatum {
 type Hover =
   | { kind: 'node'; index: number }
   | { kind: 'expenses' }
+  | { kind: 'business' }
   | { kind: 'investments' }
   | { kind: 'surplus' }
 
@@ -116,16 +118,15 @@ export function CashflowSankey({ composition, currency, locale }: CashflowSankey
       t('reports.other'),
     )
 
-    if (income.length === 0 && expense.length === 0 && investment.length === 0) {
+    const business = composition.filter(c => c.group === 'business' && c.value > 0)
+
+    if (income.length === 0 && expense.length === 0 && investment.length === 0 && business.length === 0) {
       return { nodes: [] as SankeyNodeDatum[], links: [] as SankeyLinkDatum[], hasData: false }
     }
 
-    const totalIncome = income.reduce((s, c) => s + c.value, 0)
-    const totalExpense = expense.reduce((s, c) => s + c.value, 0)
-    const totalInvest = investment.reduce((s, c) => s + c.value, 0)
-    // Surplus is what's left after BOTH spending and investing — so investing
-    // shrinks surplus instead of silently inflating it.
-    const net = totalIncome - totalExpense - totalInvest
+    // Gross inflow funds business once, personal spending and true investments.
+    const totals = cashflowTotals(composition)
+    const net = totals.surplus - totals.deficit
 
     const nodes: SankeyNodeDatum[] = []
     const links: SankeyLinkDatum[] = []
@@ -153,7 +154,7 @@ export function CashflowSankey({ composition, currency, locale }: CashflowSankey
 
     // Deficit appears as an inflow on the income side so the centre balances.
     if (net < 0) {
-      pushNode({ id: 'deficit', name: t('reports.deficit'), color: DEFICIT_COLOR, side: 'income' })
+      pushNode({ id: 'deficit', name: t('incomeBridge.fundingDeficit'), color: DEFICIT_COLOR, side: 'funding' })
     }
 
     const centerIdx = pushNode({
@@ -165,6 +166,10 @@ export function CashflowSankey({ composition, currency, locale }: CashflowSankey
 
     // Right column, top → bottom: expenses (red), investments (teal), surplus
     // (green) — matching the centre bar's stacked split.
+    business.forEach((c, i) => pushNode({
+      id: `business-${c.key}-${i}`, name: t('incomeBridge.businessGroup'), color: BUSINESS_COLOR, side: 'business',
+    }))
+
     expense.forEach((c, i) =>
       pushNode({
         id: `ex-${c.key}-${i}`,
@@ -193,6 +198,7 @@ export function CashflowSankey({ composition, currency, locale }: CashflowSankey
     if (net < 0) {
       links.push({ source: indexOf.get('deficit')!, target: centerIdx, value: -net })
     }
+    business.forEach((c, i) => links.push({ source: centerIdx, target: indexOf.get(`business-${c.key}-${i}`)!, value: c.value }))
     expense.forEach((c, i) =>
       links.push({ source: centerIdx, target: indexOf.get(`ex-${c.key}-${i}`)!, value: c.value }),
     )
@@ -208,8 +214,8 @@ export function CashflowSankey({ composition, currency, locale }: CashflowSankey
 
   // Tall enough that the busier side's nodes don't crowd; grows with node count.
   const maxSide = useMemo(() => {
-    const incomeCount = rawNodes.filter((n) => n.side === 'income').length
-    const outflowCount = rawNodes.filter((n) => n.side === 'expense' || n.side === 'investment').length
+    const incomeCount = rawNodes.filter((n) => n.side === 'income' || n.side === 'funding').length
+    const outflowCount = rawNodes.filter((n) => n.side === 'expense' || n.side === 'investment' || n.side === 'business').length
     return Math.max(incomeCount, outflowCount, 1)
   }, [rawNodes])
   const height = Math.min(780, Math.max(380, maxSide * 60))
@@ -263,6 +269,7 @@ export function CashflowSankey({ composition, currency, locale }: CashflowSankey
         let on = false
         if (hover.kind === 'node') on = s.index === hover.index || tg.index === hover.index
         else if (hover.kind === 'expenses') on = s.id === 'center' && tg.side === 'expense' && tg.id !== 'surplus'
+        else if (hover.kind === 'business') on = s.id === 'center' && tg.side === 'business'
         else if (hover.kind === 'investments') on = s.id === 'center' && tg.side === 'investment'
         else if (hover.kind === 'surplus') on = tg.id === 'surplus'
         if (on) {
@@ -298,6 +305,7 @@ export function CashflowSankey({ composition, currency, locale }: CashflowSankey
         .reduce((s, l) => s + l.value, 0)
     : 0
   const expenseOut = outBy((n) => n.side === 'expense' && n.id !== 'surplus')
+  const businessOut = outBy((n) => n.side === 'business')
   const investOut = outBy((n) => n.side === 'investment')
   const surplusOut = outBy((n) => n.id === 'surplus')
 
@@ -378,13 +386,15 @@ export function CashflowSankey({ composition, currency, locale }: CashflowSankey
               // the hub (expenses, investments, surplus).
               if (isCenter) {
                 const cx = (x0 + x1) / 2
-                const out = expenseOut + investOut + surplusOut || 1
+                const out = businessOut + expenseOut + investOut + surplusOut || 1
+                const businessH = nodeHeight * (businessOut / out)
                 const redH = nodeHeight * (expenseOut / out)
                 const tealH = nodeHeight * (investOut / out)
                 const segments = [
+                  { h: businessH, fill: BUSINESS_COLOR, hover: { kind: 'business' } as Hover, title: t('incomeBridge.businessGroup'), val: businessOut },
                   { h: redH, fill: EXPENSE_COLOR, hover: { kind: 'expenses' } as Hover, title: t('reports.expenses'), val: expenseOut },
                   { h: tealH, fill: INVEST_COLOR, hover: { kind: 'investments' } as Hover, title: t('reports.investments'), val: investOut },
-                  { h: Math.max(0, nodeHeight - redH - tealH), fill: SURPLUS_COLOR, hover: { kind: 'surplus' } as Hover, title: t('reports.surplus'), val: surplusOut },
+                  { h: Math.max(0, nodeHeight - businessH - redH - tealH), fill: SURPLUS_COLOR, hover: { kind: 'surplus' } as Hover, title: t('reports.surplus'), val: surplusOut },
                 ]
                 let segY = y0
                 return (
@@ -451,6 +461,7 @@ export function CashflowSankey({ composition, currency, locale }: CashflowSankey
         </svg>
       )}
 
+      {rawNodes.some(n => n.side === 'funding') && <p className="text-xs text-amber-600 px-2">{t('incomeBridge.fundingNote')}</p>}
       {/* Accessible table fallback — also a non-visual summary of the flows. */}
       <table className="sr-only">
         <caption>{t('reports.flowChartAria')}</caption>
@@ -465,7 +476,7 @@ export function CashflowSankey({ composition, currency, locale }: CashflowSankey
             .filter((n) => n.side !== 'center')
             .map((n, i) => {
               const idx = rawNodes.indexOf(n)
-              const value = layout?.nodes[idx]?.value ?? 0
+              const value = rawLinks.filter(l => l.source === idx || l.target === idx).reduce((sum, l) => sum + l.value, 0)
               return (
                 <tr key={i}>
                   <td>{n.name}</td>

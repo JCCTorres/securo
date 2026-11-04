@@ -884,6 +884,8 @@
     "confirmOverwriteImport": "Überschreiben und importieren"
   },
   "categories": {
+    "business": "Geschäftlich",
+    "businessDesc": "Schließt berücksichtigungsfähige Geschäftskosten von den persönlichen Ausgaben aus und reduziert das persönliche Einkommen um die Nettokosten im selben Berichtsmonat (geschäftliche Belastungen abzüglich geschäftlicher Erstattungen, mindestens jedoch null Abzug). Geschäftliche Gutschriften zählen nicht zum persönlichen Einkommen und gleichen die Kosten nur einmal aus. Ausstehende Transaktionen reduzieren das realisierte Einkommen nicht. Deaktivieren macht diese Anpassung rückgängig; Bankguthaben und Transaktionen bleiben unverändert.",
     "title": "Kategorien",
     "addCategory": "Kategorie hinzufügen",
     "editCategory": "Kategorie bearbeiten",
@@ -1128,6 +1130,10 @@
     "regenerate": "Neu generieren"
   },
   "reports": {
+    "business": "Business",
+    "grossIncome": "Bruttoeinkommen",
+    "businessDeduction": "Business-Abzug",
+    "netPersonalIncome": "Persönliches Nettoeinkommen",
     "section": "Analysen",
     "netWorth": "Nettovermögen",
     "trend": "Im Zeitverlauf",
@@ -1241,6 +1247,28 @@
     "deleteConfirm": "Möchten Sie diesen Zahlungsempfänger wirklich löschen? Dadurch wird der Zahlungsempfänger auch aus allen zugehörigen Transaktionen entfernt.",
     "deleteMultipleTitle": "Zahlungsempfänger löschen",
     "deleteMultipleConfirm": "Möchten Sie die {{count}} ausgewählten Zahlungsempfänger wirklich löschen? Dadurch werden sie auch aus allen zugehörigen Transaktionen entfernt."
+  },
+  "incomeBridge": {
+    "missingFxEntry": "Kein geprüfter Wechselkurs verfügbar. Der ursprüngliche Bankbetrag bleibt unverändert; der umgerechnete Betrag wird nicht angezeigt.",
+    "title": "Abgleich des persönlichen Einkommens",
+    "booked": "Gebuchte Einnahmen",
+    "projected": "Prognostiziertes Einkommen (nicht erhalten)",
+    "gross": "Bruttoeinkommen",
+    "business": "Business-Abzug",
+    "net": "Persönliches Nettoeinkommen",
+    "businessGroup": "Business",
+    "explanation": "Business-Kategorien schließen Kosten von persönlichen Ausgaben aus und ziehen Monatskosten abzüglich Erstattungen vom Einkommen ab (Mindestabzug: null). Dies ist keine Bankbuchung; Kontostände bleiben unverändert.",
+    "forecast": "Prognostiziertes Einkommen wurde noch nicht erhalten. Es wird getrennt von echten Buchungen angezeigt und ist im Gesamteinkommen enthalten.",
+    "forecastUnknown": "Dieser Server liefert keine Aufteilung in gebuchte und prognostizierte Einnahmen. Bruttoeinkommen darf nicht als erhalten gelten.",
+    "missingFx": "Teilweise Business-Umrechnung: {{count}} Buchungen ohne geprüften Wechselkurs sind vom Abzug ausgeschlossen. Es wird keine 1:1-Umrechnung angenommen.",
+    "rows": "{{shown}} von {{count}} echten Buchungen angezeigt",
+    "bookedNet": "Gebuchtes Nettoeinkommen nach Business, vor Prognosen.",
+    "actualTotal": "Nur echte Buchungen; Prognosen sind ausgeschlossen.",
+    "pagination": "Der Gesamtbetrag umfasst alle passenden Buchungen, nicht nur die angezeigte Seite.",
+    "reportNet": "Das Nettoergebnis des Berichts zieht zusätzlich persönliche Ausgaben ab. Die Zusammensetzung zeigt Bruttoeinkommen einschließlich ausgewiesener Prognosen; Business bleibt von Ausgaben und Investitionen getrennt.",
+    "fundingDeficit": "Finanzierungslücke",
+    "fundingNote": "Abflüsse übersteigen das Bruttoeinkommen. Die Lücke ist weder Einkommen noch Investition; ihre Finanzierung wird nicht unterstellt.",
+    "refundReversal": "Business-Erstattungsumkehr (mit Vorzeichen; kein Kreissegment)"
   },
   "common": {
     "view": "Ansehen",

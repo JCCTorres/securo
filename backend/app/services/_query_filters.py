@@ -79,6 +79,18 @@ def counts_as_pnl():
     )
 
 
+def excludes_business():
+    """Personal P/L only: do not use this for bank balances or cash flows."""
+    return or_(
+        Transaction.category_id.is_(None),
+        Transaction.category_id.not_in(select(Category.id).where(Category.is_business.is_(True))),
+    )
+
+
+def counts_as_personal_pnl():
+    return and_(counts_as_pnl(), excludes_business())
+
+
 def counts_as_user_pnl():
     """SQL filter for *user-level* P/L (dashboard, reports, budgets).
 
@@ -89,7 +101,7 @@ def counts_as_user_pnl():
     track real cash through the account, not user P/L.
     """
     return and_(
-        counts_as_pnl(),
+        counts_as_personal_pnl(),
         Transaction.source != "settlement",
     )
 
@@ -317,7 +329,7 @@ async def viewer_shared_pnl(
             Transaction.source != "opening_balance",
             date_col >= month_start,
             date_col < month_end,
-            counts_as_pnl(),
+            counts_as_personal_pnl(),
         )
         .group_by(Transaction.currency)
     )
@@ -394,7 +406,7 @@ async def viewer_shared_spending_by_category(
             Transaction.source != "opening_balance",
             date_col >= month_start,
             date_col < month_end,
-            counts_as_pnl(),
+            counts_as_personal_pnl(),
         )
         .group_by(Transaction.category_id, Transaction.currency)
     )

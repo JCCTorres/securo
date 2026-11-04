@@ -21,7 +21,8 @@ from app.services import split_service
 from app.services.credit_card_service import apply_effective_date
 from app.services.rule_service import apply_rules_to_transaction
 from app.services.fx_rate_service import stamp_primary_amount, convert as fx_convert
-from app.services._query_filters import counts_as_pnl, counts_as_user_pnl, reporting_date_col
+from app.services._query_filters import counts_as_personal_pnl, counts_as_user_pnl, reporting_date_col
+from app.services.business_income_service import get_business_adjustment
 
 
 async def _ensure_category_in_workspace(
@@ -233,11 +234,11 @@ async def get_transactions(
 
     # Apply filters
     # Multi-id filters take precedence over single-id filters.
-    if account_ids:
+    if account_ids is not None:
         base_query = base_query.where(Transaction.account_id.in_(account_ids))
     elif account_id:
         base_query = base_query.where(Transaction.account_id == account_id)
-    if category_ids:
+    if category_ids is not None:
         base_query = base_query.where(Transaction.category_id.in_(category_ids))
     elif category_id:
         base_query = base_query.where(Transaction.category_id == category_id)
@@ -250,10 +251,7 @@ async def get_transactions(
         )
     if exclude_transfers:
         base_query = base_query.where(Transaction.transfer_pair_id.is_(None))
-    if user_pnl_only:
-        base_query = base_query.where(Account.is_closed == False, counts_as_user_pnl())
-    if txn_type:
-        base_query = base_query.where(Transaction.type == txn_type)
+
     if status:
         base_query = base_query.where(Transaction.status == status)
     if currency:
@@ -391,6 +389,18 @@ async def get_transactions(
         base_query = base_query.where(or_(*clauses))
 
     # Get total count
+
+    # Retain the exact search/category/account/date scope before the personal
+    # credit-only drill-down hides the Business debits needed by its bridge.
+    business_query = base_query
+    if user_pnl_only:
+        base_query = base_query.where(Account.is_closed == False, counts_as_user_pnl(),
+                                      Transaction.status == "posted")
+    if txn_type:
+        base_query = base_query.where(Transaction.type == txn_type)
+        if not user_pnl_only:
+            business_query = business_query.where(Transaction.type == txn_type)
+
     count_query = select(func.count()).select_from(base_query.subquery())
     total = await session.scalar(count_query)
 
@@ -406,7 +416,7 @@ async def get_transactions(
         # (issue #242) so the footer matches the dashboard & reports: paired
         # transfers, `treat_as_transfer` categories (transfers, investments,
         # custom) and ignored items are kept OUT of income/expense.
-        pnl_filter = counts_as_pnl()
+        pnl_filter = counts_as_user_pnl() if user_pnl_only else counts_as_personal_pnl()
         pnl_subq = base_query.where(pnl_filter).subquery()
         amount_norm = func.coalesce(
             pnl_subq.c.amount_primary, pnl_subq.c.amount
@@ -438,7 +448,35 @@ async def get_transactions(
         )
         excluded = Decimal(str(excluded_total or 0))
 
+        from app.models.user import User
+        from app.core.config import get_settings
+        viewer = await session.get(User, user_id)
+        primary_currency = viewer.primary_currency if viewer else get_settings().default_currency
+        missing_fx_count = 0
+        if user_pnl_only:
+            from app.services.personal_pnl_service import converted_personal_rows
+            rows = (await session.execute(base_query.where(pnl_filter))).scalars().all()
+            converted = await converted_personal_rows(
+                session, [(tx, tx.date) for tx in rows], workspace_id, user_id, primary_currency,
+                raw=account_ids is not None or account_id is not None or in_bill_view,
+            )
+            income = sum((amount for tx, _, amount in converted
+                          if tx.type == "credit" and amount is not None), Decimal(0))
+            expense = sum((amount for tx, _, amount in converted
+                           if tx.type == "debit" and amount is not None), Decimal(0))
+            missing_fx_count = sum(amount is None for _, _, amount in converted)
+        selected = business_query.with_only_columns(Transaction.id).order_by(None)
+        business = await get_business_adjustment(
+            session, workspace_id, user_id, None, None, primary_currency,
+            accounting_mode or "cash",
+            account_ids if account_ids is not None else ([account_id] if account_id else None),
+            transaction_ids=selected, date_column=filter_date_col,
+            exclude_closed=user_pnl_only,
+        )
+        bridge = business.bridge(float(income), missing_fx_count=missing_fx_count)
+        income = Decimal(str(bridge.net_income))
         summary = {
+            "income_adjustment": bridge,
             "income": income,
             "expense": expense,
             "net": income - expense,

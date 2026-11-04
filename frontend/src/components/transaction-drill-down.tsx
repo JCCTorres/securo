@@ -7,7 +7,9 @@ import { AlertTriangle, Info, Paperclip, X } from 'lucide-react'
 import { CategoryIcon } from '@/components/category-icon'
 import { useAuth } from '@/contexts/auth-context'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
-import type { Transaction } from '@/types'
+import type { IncomeAdjustment, Transaction } from '@/types'
+import { IncomeBridge } from '@/components/income-bridge'
+import { drillDownTotal, reconcileIncomeAdjustment } from '@/lib/income-presentation'
 
 export type DrillDownFilter = {
   title: string
@@ -45,10 +47,12 @@ export function TransactionDrillDown({
   filter,
   onClose,
   onTransactionClick,
+  cardIncomeAdjustment,
 }: {
   filter: DrillDownFilter | null
   onClose: () => void
   onTransactionClick?: (tx: Transaction) => void
+  cardIncomeAdjustment?: IncomeAdjustment | null
 }) {
   const { t } = useTranslation()
   const { user } = useAuth()
@@ -81,7 +85,7 @@ export function TransactionDrillDown({
   const { data: projectedTxs } = useQuery({
     queryKey: ['dashboard', 'projected-transactions', monthParam],
     queryFn: () => dashboard.projectedTransactions(monthParam),
-    enabled: !!filter && !!monthParam,
+    enabled: !!filter && !!monthParam && filter.type !== 'credit' && !filter.account_id && !filter.account_ids,
   })
 
   const { data: accountingModeData } = useQuery({
@@ -114,6 +118,9 @@ export function TransactionDrillDown({
     }
 
     for (const pt of projectedTxs ?? []) {
+      // Income forecasts are disclosed in the bridge, not bank rows/counts.
+      // This legacy endpoint has no account scope, so never use it for one.
+      if (filter?.type === 'credit' || filter?.account_id || filter?.account_ids) continue
       // Filter projected txs by drill-down criteria
       if (filter?.type && pt.type !== filter.type) continue
       if (filter?.category_id && String(pt.category_id) !== filter.category_id) continue
@@ -170,19 +177,11 @@ export function TransactionDrillDown({
     }
   }, [filter, onClose])
 
-  // Sum in user's primary currency. For foreign-currency rows we need
-  // amount_primary; if it's missing we can't convert, so skip the row
-  // instead of adding a raw foreign amount as if it were primary. This
-  // matches how get_summary computes monthly_*_primary on the backend.
-  const absTotal = displayItems.reduce((sum, item) => {
-    if (item.currency === userCurrency) {
-      return sum + Math.abs(item.amount)
-    }
-    if (item.amountPrimary != null) {
-      return sum + Math.abs(item.amountPrimary)
-    }
-    return sum
-  }, 0)
+  const total = drillDownTotal(data?.summary, filter?.type)
+  const totalCurrency = data?.summary?.currency ?? userCurrency
+  const adjustment = filter?.type === 'credit'
+    ? reconcileIncomeAdjustment(data?.summary?.income_adjustment, cardIncomeAdjustment)
+    : undefined
 
   return (
     <>
@@ -218,6 +217,12 @@ export function TransactionDrillDown({
           <div className="flex items-start gap-2 px-5 py-2.5 bg-muted/40 border-b border-border text-[11px] text-muted-foreground shrink-0">
             <Info size={12} className="mt-0.5 shrink-0" />
             <span>{t('dashboard.accrualNote')}</span>
+          </div>
+        )}
+
+        {adjustment && !isLoading && (
+          <div className="px-5 py-3 border-b border-border shrink-0">
+            <IncomeBridge adjustment={adjustment} />
           </div>
         )}
 
@@ -276,14 +281,13 @@ export function TransactionDrillDown({
                       {item.type === 'credit' ? '+' : '-'}
                       {mask(formatCurrency(Math.abs(item.amount), item.currency ?? userCurrency, locale))}
                     </span>
-                    {item.currency !== userCurrency && item.amountPrimary != null && (
+                    {item.currency !== userCurrency && (item.amountPrimary != null || item.transaction?.fx_fallback) && (
                       <div className="flex items-center justify-end gap-1">
-                        {item.transaction?.fx_fallback && (
-                          <span title={t('transactions.fxFallbackTooltip')}><AlertTriangle size={11} className="text-amber-500 shrink-0" /></span>
-                        )}
-                        <span className="text-[10px] text-muted-foreground tabular-nums">
-                          {mask(formatCurrency(Math.abs(item.amountPrimary), userCurrency, locale))}
-                        </span>
+                        {item.transaction?.fx_fallback ? (
+                          <span title={t('incomeBridge.missingFxEntry')}><AlertTriangle size={11} className="text-amber-500 shrink-0" /></span>
+                        ) : <span className="text-[10px] text-muted-foreground tabular-nums">
+                          {mask(formatCurrency(Math.abs(item.amountPrimary!), userCurrency, locale))}
+                        </span>}
                       </div>
                     )}
                   </div>
@@ -294,19 +298,21 @@ export function TransactionDrillDown({
         </div>
 
         {/* Footer */}
-        {displayItems.length > 0 && (
+        {data && !isLoading && (
           <div className="px-5 py-3 border-t border-border bg-muted/50 shrink-0">
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">
-                {t('dashboard.drillDownTotal', {
-                  count: displayItems.length,
-                  total: mask(formatCurrency(absTotal, userCurrency, locale)),
+                {t('incomeBridge.rows', {
+                  shown: data.items.length,
+                  count: data.total,
                 })}
               </span>
               <span className="text-sm font-bold tabular-nums text-foreground">
-                {mask(formatCurrency(absTotal, userCurrency, locale))}
+                {total === null ? '—' : mask(formatCurrency(total, totalCurrency, locale))}
               </span>
             </div>
+            <p className="text-[11px] text-muted-foreground mt-1">{t(filter?.type === 'credit' ? 'incomeBridge.bookedNet' : 'incomeBridge.actualTotal')}</p>
+            {data.total > data.items.length && <p className="text-[11px] text-muted-foreground mt-1">{t('incomeBridge.pagination')}</p>}
           </div>
         )}
       </div>

@@ -20,6 +20,7 @@ from app.schemas.transaction_calendar import TransactionCalendarResponse
 from app.services import transaction_service
 from app.services.admin_service import get_credit_card_accounting_mode
 from app.services.transaction_calendar_service import get_transaction_calendar
+from app.schemas.business_income import IncomeAdjustment
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
@@ -51,6 +52,7 @@ class TransactionsSummary(BaseModel):
     `treat_as_transfer` categories (transfers, investments, custom) and
     ignored items — i.e. the complement of `counts_as_pnl()`."""
     income: float
+    income_adjustment: Optional[IncomeAdjustment] = None
     expense: float
     net: float
     excluded: float

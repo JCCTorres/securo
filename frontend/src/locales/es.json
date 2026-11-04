@@ -884,6 +884,8 @@
     "confirmOverwriteImport": "Overwrite and import"
   },
   "categories": {
+    "business": "Empresarial",
+    "businessDesc": "Excluye los costes empresariales elegibles de los gastos personales y reduce los ingresos personales por el coste neto del mismo mes de referencia (débitos empresariales menos devoluciones/reembolsos empresariales, con una deducción mínima de cero). Los créditos empresariales se excluyen de los ingresos personales y compensan el coste una sola vez. Las transacciones pendientes no reducen los ingresos realizados. Desmarca para revertir este ajuste; los saldos bancarios y las transacciones no cambian.",
     "title": "Categorías",
     "addCategory": "Agregar categoría",
     "editCategory": "Editar categoría",
@@ -1128,6 +1130,10 @@
     "regenerate": "Regenerar"
   },
   "reports": {
+    "business": "Business",
+    "grossIncome": "Ingresos brutos",
+    "businessDeduction": "Deducción Business",
+    "netPersonalIncome": "Ingresos personales netos",
     "section": "Analítica",
     "netWorth": "Patrimonio neto",
     "trend": "A lo largo del tiempo",
@@ -1241,6 +1247,28 @@
     "deleteConfirm": "¿Estás seguro de que quieres eliminar este beneficiario? Esto también lo eliminará de cualquier transacción asociada.",
     "deleteMultipleTitle": "Eliminar beneficiarios",
     "deleteMultipleConfirm": "¿Estás seguro de que quieres eliminar los {{count}} beneficiarios seleccionados? Esto también los eliminará de cualquier transacción asociada."
+  },
+  "incomeBridge": {
+    "missingFxEntry": "Tipo de cambio verificado no disponible. El importe bancario original no cambia; no se muestra el importe convertido.",
+    "title": "Conciliación de ingresos personales",
+    "booked": "Cobros registrados",
+    "projected": "Ingresos previstos (no recibidos)",
+    "gross": "Ingresos brutos",
+    "business": "Deducción Business",
+    "net": "Ingresos personales netos",
+    "businessGroup": "Business",
+    "explanation": "Las categorías Business excluyen costes de los gastos personales y restan de los ingresos los costes del mes menos reembolsos (deducción mínima: cero). No es una transacción bancaria; los saldos no cambian.",
+    "forecast": "Los ingresos previstos no se han recibido. Se muestran separados de las transacciones reales y se incluyen en los ingresos totales.",
+    "forecastUnknown": "Este servidor no informa del desglose entre cobros y previsiones. No debe suponerse que los ingresos brutos se han recibido.",
+    "missingFx": "Conversión Business parcial: {{count}} movimientos sin tipo de cambio verificado se excluyen de la deducción. No se supone una conversión 1:1.",
+    "rows": "Mostrando {{shown}} de {{count}} transacciones reales",
+    "bookedNet": "Ingresos netos registrados, después de Business y antes de previsiones.",
+    "actualTotal": "Total solo de transacciones reales; previsiones excluidas.",
+    "pagination": "El total abarca todas las transacciones coincidentes, no solo la página mostrada.",
+    "reportNet": "El resultado neto del informe también resta gastos personales. La composición muestra ingresos brutos, incluidas las previsiones indicadas; Business se separa de gastos e inversiones.",
+    "fundingDeficit": "Déficit de financiación",
+    "fundingNote": "Las salidas superan los ingresos brutos. La diferencia no es un ingreso ni una inversión; no se presupone su fuente de financiación.",
+    "refundReversal": "Reversión por reembolso Business (con signo; fuera del gráfico circular)"
   },
   "common": {
     "view": "Ver",

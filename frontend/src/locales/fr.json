@@ -884,6 +884,8 @@
     "confirmOverwriteImport": "Écraser et importer"
   },
   "categories": {
+    "business": "Professionnel",
+    "businessDesc": "Exclut les coûts professionnels admissibles des dépenses personnelles et réduit les revenus personnels du coût net du même mois de référence (débits professionnels moins remboursements professionnels, avec une déduction minimale de zéro). Les crédits professionnels sont exclus des revenus personnels et ne compensent le coût qu’une seule fois. Les transactions en attente ne réduisent pas les revenus réalisés. Décochez pour annuler cet ajustement ; les soldes bancaires et les transactions restent inchangés.",
     "title": "Catégories",
     "addCategory": "Ajouter une catégorie",
     "editCategory": "Modifier la catégorie",
@@ -1128,6 +1130,10 @@
     "regenerate": "Régénérer"
   },
   "reports": {
+    "business": "Business",
+    "grossIncome": "Revenu brut",
+    "businessDeduction": "Déduction Business",
+    "netPersonalIncome": "Revenu personnel net",
     "section": "Analyses",
     "netWorth": "Valeur nette",
     "trend": "Dans le temps",
@@ -1241,6 +1247,28 @@
     "deleteConfirm": "Êtes-vous sûr de vouloir supprimer ce bénéficiaire ? Cela le supprimera également de toutes les transactions associées.",
     "deleteMultipleTitle": "Supprimer les bénéficiaires",
     "deleteMultipleConfirm": "Êtes-vous sûr de vouloir supprimer les {{count}} bénéficiaires sélectionnés ? Cela les supprimera également de toutes les transactions associées."
+  },
+  "incomeBridge": {
+    "missingFxEntry": "Taux de change vérifié indisponible. Le montant bancaire original reste inchangé ; le montant converti n’est pas affiché.",
+    "title": "Rapprochement du revenu personnel",
+    "booked": "Recettes enregistrées",
+    "projected": "Revenus prévus (non reçus)",
+    "gross": "Revenu brut",
+    "business": "Déduction Business",
+    "net": "Revenu personnel net",
+    "businessGroup": "Business",
+    "explanation": "Les catégories Business excluent les coûts des dépenses personnelles et déduisent du revenu les coûts du mois moins les remboursements (déduction minimale : zéro). Ce n’est pas une opération bancaire ; les soldes restent inchangés.",
+    "forecast": "Les revenus prévus ne sont pas encaissés. Ils sont séparés des opérations réelles et inclus dans le revenu total.",
+    "forecastUnknown": "Ce serveur ne précise pas la répartition entre recettes et prévisions. Le revenu brut ne doit pas être considéré comme encaissé.",
+    "missingFx": "Conversion Business partielle : {{count}} opérations sans taux vérifié sont exclues de la déduction. Aucune conversion 1:1 n’est supposée.",
+    "rows": "Affichage de {{shown}} sur {{count}} opérations réelles",
+    "bookedNet": "Revenu net enregistré, après Business et avant prévisions.",
+    "actualTotal": "Total des opérations réelles uniquement ; prévisions exclues.",
+    "pagination": "Le total couvre toutes les opérations correspondantes, pas seulement la page affichée.",
+    "reportNet": "Le résultat net du rapport déduit aussi les dépenses personnelles. La composition affiche le revenu brut, prévisions indiquées comprises ; Business est séparé des dépenses et investissements.",
+    "fundingDeficit": "Déficit de financement",
+    "fundingNote": "Les sorties dépassent le revenu brut. Cet écart n’est ni un revenu ni un investissement ; son financement n’est pas présumé.",
+    "refundReversal": "Annulation Business par remboursement (signée ; hors diagramme circulaire)"
   },
   "common": {
     "view": "Voir",

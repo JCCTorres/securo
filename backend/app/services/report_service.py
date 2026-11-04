@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import String, select, desc, func, case
+from sqlalchemy import String, select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -16,8 +16,6 @@ from app.models.category import Category
 from app.models.user import User
 from app.services._query_filters import (
     counts_as_pnl,
-    counts_as_user_pnl,
-    owner_split_offset_by_category,
     reporting_date_col,
 )
 from app.services.admin_service import get_credit_card_accounting_mode
@@ -393,179 +391,39 @@ async def get_income_expenses_report(
     accounting_mode = await get_credit_card_accounting_mode(session)
     report_date = reporting_date_col(accounting_mode)
 
-    label_expr = _interval_label_expr(interval, report_date).label('period')
 
-    # Use amount_primary when available, fall back to amount
-    amount_expr = func.coalesce(Transaction.amount_primary, Transaction.amount)
-
-    result = await session.execute(
-        select(
-            label_expr,
-            func.sum(case((Transaction.type == "credit", amount_expr), else_=0)),
-            func.sum(case((Transaction.type == "debit", amount_expr), else_=0)),
-        )
-        .join(Account, Transaction.account_id == Account.id)
-        .where(
-            Transaction.workspace_id == workspace_id,
-            Account.is_closed == False,
-            report_date >= start,
-            report_date <= today,
-            Transaction.source != "opening_balance",
-            counts_as_user_pnl(),
-            *acct_filter,
-        )
-        .group_by(label_expr)
-        .order_by(label_expr)
+    # All realized representations consume the same converted personal rows.
+    # Pending bank rows are not booked and do not imply a recurring forecast.
+    from app.services.personal_pnl_service import get_personal_pnl_rows
+    from app.services.fx_rate_service import convert as fx_convert
+    pnl_rows = await get_personal_pnl_rows(
+        session, workspace_id, user_id, primary_currency, start,
+        today + timedelta(days=1), accounting_mode, account_ids,
     )
-
-    # Build data map from query results
     data_map: dict[str, tuple[float, float]] = {}
-    for row in result.all():
-        income = float(row[1] or 0)
-        expenses = abs(float(row[2] or 0))
-        data_map[row[0]] = (income, expenses)
-
-    # Subtract non-owner shares of the user's own splits per period — the
-    # user shouldn't be charged for the parts they're owed back.
-    from sqlalchemy import or_ as _or_, and_ as _and_
-    from app.models.group import Group as _Group_, GroupMember as _GroupMember_
-    from app.models.transaction_split import TransactionSplit as _TS_
-    from app.services.fx_rate_service import convert as fx_convert
-
-    own_member_ids_sq = (
-        select(_GroupMember_.id)
-        .outerjoin(_Group_, _Group_.id == _GroupMember_.group_id)
-        .where(
-            _or_(
-                _GroupMember_.linked_user_id == user_id,
-                _and_(_GroupMember_.is_self == True, _Group_.user_id == user_id),
-            )
-        )
-    )
-    owner_offset_result = await session.execute(
-        select(
-            label_expr,
-            Transaction.currency,
-            func.sum(
-                case(
-                    (Transaction.type == "credit", _TS_.share_amount),
-                    else_=0,
-                )
-            ),
-            func.sum(
-                case(
-                    (Transaction.type == "debit", _TS_.share_amount),
-                    else_=0,
-                )
-            ),
-        )
-        .select_from(_TS_)
-        .join(Transaction, _TS_.transaction_id == Transaction.id)
-        .where(
-            Transaction.user_id == user_id,
-            Transaction.workspace_id == workspace_id,
-            _TS_.group_member_id.notin_(own_member_ids_sq),
-            report_date >= start,
-            report_date <= today,
-            Transaction.source != "opening_balance",
-            counts_as_user_pnl(),
-        )
-        .group_by(label_expr, Transaction.currency)
-    )
-    for row in (owner_offset_result.all() if not filtered else []):
-        period, currency, raw_credit, raw_debit = row
-        sub_inc = 0.0
-        sub_exp = 0.0
-        if raw_credit:
-            inc_pri, _ = await fx_convert(
-                session, Decimal(str(raw_credit)), currency, primary_currency
-            )
-            sub_inc = float(inc_pri)
-        if raw_debit:
-            exp_pri, _ = await fx_convert(
-                session, Decimal(str(raw_debit)), currency, primary_currency
-            )
-            sub_exp = abs(float(exp_pri))
-        existing_income, existing_expenses = data_map.get(period, (0.0, 0.0))
-        data_map[period] = (
-            max(0.0, existing_income - sub_inc),
-            max(0.0, existing_expenses - sub_exp),
-        )
-
-    # Layer in the viewer's share from group splits — concert tickets
-    # paid by a friend show up as the viewer's expense in their P/L
-    # picture, just like in /transactions and the dashboard. Group by
-    # currency so we can FX-convert each bucket to primary correctly.
-    from app.models.group import GroupMember
-    from app.models.transaction_split import TransactionSplit
-
-    # Exclude is_self memberships — the owner's own self-member must
-    # not surface their in-Pessoal transactions in Trabalho's report.
-    viewer_member_ids = select(GroupMember.id).where(
-        GroupMember.linked_user_id == user_id,
-        GroupMember.is_self.is_(False),
-    )
-    shared_result = await session.execute(
-        select(
-            label_expr,
-            Transaction.currency,
-            func.sum(
-                case(
-                    (Transaction.type == "credit", TransactionSplit.share_amount),
-                    else_=0,
-                )
-            ),
-            func.sum(
-                case(
-                    (Transaction.type == "debit", TransactionSplit.share_amount),
-                    else_=0,
-                )
-            ),
-        )
-        .select_from(TransactionSplit)
-        .join(Transaction, TransactionSplit.transaction_id == Transaction.id)
-        .where(
-            TransactionSplit.group_member_id.in_(viewer_member_ids),
-            Transaction.user_id != user_id,
-            Transaction.workspace_id != workspace_id,
-            report_date >= start,
-            report_date <= today,
-            Transaction.source != "opening_balance",
-            counts_as_user_pnl(),
-        )
-        .group_by(label_expr, Transaction.currency)
-    )
-    from app.services.fx_rate_service import convert as fx_convert
-    for row in (shared_result.all() if not filtered else []):
-        period, currency, raw_credit, raw_debit = row
-        share_income_pri = 0.0
-        share_expenses_pri = 0.0
-        if raw_credit:
-            inc_pri, _ = await fx_convert(
-                session, Decimal(str(raw_credit)), currency, primary_currency
-            )
-            share_income_pri = float(inc_pri)
-        if raw_debit:
-            exp_pri, _ = await fx_convert(
-                session, Decimal(str(raw_debit)), currency, primary_currency
-            )
-            share_expenses_pri = abs(float(exp_pri))
-        existing_income, existing_expenses = data_map.get(period, (0.0, 0.0))
-        data_map[period] = (
-            existing_income + share_income_pri,
-            existing_expenses + share_expenses_pri,
-        )
+    missing_fx_count = 0
+    for tx, day, amount in pnl_rows:
+        if amount is None:
+            missing_fx_count += 1
+            continue
+        label = _format_date_label(day, interval)
+        income, expenses = data_map.get(label, (0.0, 0.0))
+        data_map[label] = (income + float(amount), expenses) if tx.type == "credit" else (
+            income, expenses + float(amount))
+    # Investment contributions retain their existing raw account contract.
+    amount_expr = func.coalesce(Transaction.amount_primary, Transaction.amount)
 
     # Add recurring projections for each month in the range (consistent with dashboard)
     from app.services.dashboard_service import _month_range, _get_recurring_projections
 
+    projected_income_by_period: dict[str, float] = {}
     cursor = start
     while cursor <= today:
         m_start, m_end = _month_range(cursor)
         # A day-window range can start mid-month: only project occurrences that
         # fall inside the requested window.
         projections = await _get_recurring_projections(
-            session, workspace_id, max(m_start, start), m_end, account_ids
+            session, workspace_id, max(m_start, start), m_end, account_ids, personal_only=True
         )
         for proj in projections:
             # Convert to primary currency
@@ -577,6 +435,9 @@ async def get_income_expenses_report(
             existing_income, existing_expenses = data_map.get(label, (0.0, 0.0))
             if proj["type"] == "credit":
                 data_map[label] = (existing_income + proj_amount, existing_expenses)
+                projected_income_by_period[label] = (
+                    projected_income_by_period.get(label, 0.0) + proj_amount
+                )
             else:
                 data_map[label] = (existing_income, existing_expenses + proj_amount)
         # Advance to next month
@@ -584,6 +445,21 @@ async def get_income_expenses_report(
             cursor = date(cursor.year + 1, 1, 1)
         else:
             cursor = date(cursor.year, cursor.month + 1, 1)
+
+    from app.services.business_income_service import get_business_adjustment
+
+    business = await get_business_adjustment(
+        session, workspace_id, user_id, start, today + timedelta(days=1),
+        primary_currency, accounting_mode, account_ids,
+    )
+    business_periods: dict[str, float] = {}
+    for day, delta in business.daily.items():
+        label = _format_date_label(day, interval)
+        business_periods[label] = business_periods.get(label, 0.0) + float(delta)
+    gross_data_map = dict(data_map)
+    for label, deduction in business_periods.items():
+        gross, expense = data_map.get(label, (0.0, 0.0))
+        data_map[label] = (gross - deduction, expense)
 
     # Generate all expected date points and map to results
     points = _date_points(start, today, interval)
@@ -603,6 +479,12 @@ async def get_income_expenses_report(
             breakdowns={
                 "income": round(income, 2),
                 "expenses": round(expenses, 2),
+                "grossIncome": round(gross_data_map.get(label, (0.0, 0.0))[0], 2),
+                "bookedIncome": round(gross_data_map.get(label, (0.0, 0.0))[0]
+                                      - projected_income_by_period.get(label, 0.0), 2),
+                "projectedIncome": round(projected_income_by_period.get(label, 0.0), 2),
+                "businessDeduction": round(business_periods.get(label, 0.0), 2),
+                "netPersonalIncome": round(income, 2),
             },
         ))
 
@@ -646,66 +528,34 @@ async def get_income_expenses_report(
 
     meta = ReportMeta(
         type="income_expenses",
+        income_adjustment=business.bridge(
+            total_income + business.deduction,
+            projected_income=sum(projected_income_by_period.get(p.date, 0.0) for p in trend),
+            missing_fx_count=missing_fx_count,
+        ),
         series_keys=["income", "expenses"],
         currency=primary_currency,
         interval=interval,
     )
 
-    # Build per-category composition for the full date range
-    cat_result = await session.execute(
-        select(
-            Category.id,
-            Category.name,
-            Category.color,
-            Transaction.type,
-            func.sum(amount_expr),
-        )
-        .select_from(Transaction)
-        .join(Account, Transaction.account_id == Account.id)
-        .outerjoin(Category, Transaction.category_id == Category.id)
-        .where(
-            Transaction.workspace_id == workspace_id,
-            Account.is_closed == False,
-            report_date >= start,
-            report_date <= today,
-            Transaction.source != "opening_balance",
-            counts_as_user_pnl(),
-            *acct_filter,
-        )
-        .group_by(Category.id, Category.name, Category.color, Transaction.type)
-    )
-
-    # Collect composition into a mutable map so projections can be added
-    # Key: (cat_key, group) -> {label, color, value}
+    # Compose and bucket the exact same realized shares as the headline.
     comp_map: dict[tuple[str, str], dict] = {}
-    for row in cat_result.all():
-        cat_id, cat_name, cat_color, txn_type, total_amount = row
-        amount = abs(float(total_amount or 0))
-        if amount <= 0:
+    cat_trend_map: dict[tuple[str, str], dict] = {}
+    for tx, day, converted in pnl_rows:
+        if converted is None:
             continue
-        cat_key = str(cat_id) if cat_id else "uncategorized"
-        group = "income" if txn_type == "credit" else "expenses"
-        comp_map[(cat_key, group)] = {
-            "label": cat_name if cat_name else "Uncategorized",
-            "color": cat_color if cat_color else "#6B7280",
-            "value": amount,
-        }
-
-    # Subtract non-owner shares of own splits from composition (debit only —
-    # owner_split_offset_by_category is debit-only). Keeps the report's
-    # composition consistent with summary totals under share-only model.
-    full_range_offset = {} if filtered else await owner_split_offset_by_category(
-        session, user_id, start, today + timedelta(days=1),
-        use_effective_date=accounting_mode == "accrual",
-        primary_currency=primary_currency,
-    )
-    for cat_uuid, offset_total in full_range_offset.items():
-        cat_key = str(cat_uuid) if cat_uuid else "uncategorized"
-        comp_key = (cat_key, "expenses")
-        if comp_key in comp_map:
-            comp_map[comp_key]["value"] -= offset_total
-            if comp_map[comp_key]["value"] <= 0:
-                comp_map.pop(comp_key)
+        amount = float(converted)
+        cat = tx.category
+        key = (str(tx.category_id) if tx.category_id else "uncategorized",
+               "income" if tx.type == "credit" else "expenses")
+        info = {"label": cat.name if cat else "Uncategorized",
+                "color": cat.color if cat else "#6B7280"}
+        comp = comp_map.setdefault(key, {**info, "value": 0.0})
+        comp["value"] += amount
+        item = cat_trend_map.setdefault(key, {**info, "total": 0.0, "periods": {}})
+        label = _format_date_label(day, interval)
+        item["total"] += amount
+        item["periods"][label] = item["periods"].get(label, 0.0) + amount
 
     # Investment-style outflows: transactions in `treat_as_transfer` categories
     # are excluded from P&L by counts_as_user_pnl (an investment application's
@@ -736,6 +586,7 @@ async def get_income_expenses_report(
             Transaction.is_ignored.is_(False),
             Category.treat_as_transfer.is_(True),
             Category.is_ignored.is_(False),
+            Category.is_business.is_(False),
             *acct_filter,
         )
         .group_by(Category.id, Category.name, Category.color)
@@ -750,103 +601,13 @@ async def get_income_expenses_report(
             "value": amount,
         }
 
-    # Build per-category trend (sparklines) for the full date range
-    cat_trend_result = await session.execute(
-        select(
-            label_expr,
-            Category.id,
-            Category.name,
-            Category.color,
-            Transaction.type,
-            func.sum(amount_expr),
-        )
-        .select_from(Transaction)
-        .join(Account, Transaction.account_id == Account.id)
-        .outerjoin(Category, Transaction.category_id == Category.id)
-        .where(
-            Transaction.workspace_id == workspace_id,
-            Account.is_closed == False,
-            report_date >= start,
-            report_date <= today,
-            Transaction.source != "opening_balance",
-            counts_as_user_pnl(),
-            *acct_filter,
-        )
-        .group_by(label_expr, Category.id, Category.name, Category.color, Transaction.type)
-    )
-
-    # Collect into dict[(cat_key, group)] -> {label, color, total, periods}
-    cat_trend_map: dict[tuple[str, str], dict] = {}
-    for row in cat_trend_result.all():
-        period_label, cat_id, cat_name, cat_color, txn_type, total_amount = row
-        amount = abs(float(total_amount or 0))
-        if amount <= 0:
-            continue
-        cat_key = str(cat_id) if cat_id else "uncategorized"
-        group = "income" if txn_type == "credit" else "expenses"
-        map_key = (cat_key, group)
-        if map_key not in cat_trend_map:
-            cat_trend_map[map_key] = {
-                "label": cat_name if cat_name else "Uncategorized",
-                "color": cat_color if cat_color else "#6B7280",
-                "total": 0.0,
-                "periods": {},
-            }
-        cat_trend_map[map_key]["total"] += amount
-        cat_trend_map[map_key]["periods"][period_label] = (
-            cat_trend_map[map_key]["periods"].get(period_label, 0.0) + amount
-        )
-
-    # Subtract non-owner shares of own splits per (period, category) — keeps
-    # the per-category trend consistent with the share-only summary.
-    cat_offset_result = await session.execute(
-        select(
-            label_expr,
-            Transaction.category_id,
-            Transaction.currency,
-            func.sum(_TS_.share_amount),
-        )
-        .select_from(_TS_)
-        .join(Transaction, _TS_.transaction_id == Transaction.id)
-        .where(
-            Transaction.user_id == user_id,
-            Transaction.workspace_id == workspace_id,
-            Transaction.type == "debit",
-            _TS_.group_member_id.notin_(own_member_ids_sq),
-            report_date >= start,
-            report_date <= today,
-            Transaction.source != "opening_balance",
-            counts_as_user_pnl(),
-        )
-        .group_by(label_expr, Transaction.category_id, Transaction.currency)
-    )
-    for period_label, cat_id, currency, raw_total in (cat_offset_result.all() if not filtered else []):
-        if not raw_total:
-            continue
-        cat_key = str(cat_id) if cat_id else "uncategorized"
-        offset_pri, _ = await fx_convert(
-            session, Decimal(str(raw_total)), currency, primary_currency
-        )
-        offset = float(offset_pri)
-        map_key = (cat_key, "expenses")
-        if map_key not in cat_trend_map:
-            continue
-        cat_trend_map[map_key]["total"] = max(
-            0.0, cat_trend_map[map_key]["total"] - offset
-        )
-        cur_period = cat_trend_map[map_key]["periods"].get(period_label, 0.0)
-        cat_trend_map[map_key]["periods"][period_label] = max(0.0, cur_period - offset)
-    # Drop categories that fully zeroed out
-    for key in list(cat_trend_map.keys()):
-        if cat_trend_map[key]["total"] <= 0:
-            cat_trend_map.pop(key)
-
     # Add recurring projections to composition and category trend
     cat_cache: dict[str, dict] = {}
     cursor2 = start
     while cursor2 <= today:
         m_start, m_end = _month_range(cursor2)
-        projections = await _get_recurring_projections(session, workspace_id, m_start, m_end, account_ids)
+        projections = await _get_recurring_projections(session, workspace_id, m_start, m_end, account_ids,
+                                                      personal_only=True)
         period_label = _format_date_label(cursor2, interval)
         for proj in projections:
             cat_id_str = str(proj["category_id"]) if proj["category_id"] else "uncategorized"
@@ -901,6 +662,25 @@ async def get_income_expenses_report(
         else:
             cursor2 = date(cursor2.year, cursor2.month + 1, 1)
 
+    # Explicit nonbank bridge: gross composition less Business = personal income.
+    # This is not an investment contribution and not a personal expense.
+    if any(business_periods.values()):
+        comp_map[("business-deduction", "business")] = {
+            "label": "Business", "color": "#D97706", "value": business.deduction,
+        }
+        cat_trend_map[("business-deduction", "business")] = {
+            "label": "Business", "color": "#D97706", "total": business.deduction,
+            "periods": business_periods,
+        }
+    summary.breakdowns.extend([
+        ReportBreakdown(key="grossIncome", label="Gross income",
+                        value=round(total_income + business.deduction, 2), color="#10B981"),
+        ReportBreakdown(key="businessDeduction", label="Business deduction",
+                        value=business.deduction, color="#D97706"),
+        ReportBreakdown(key="netPersonalIncome", label="Net personal income",
+                        value=round(total_income, 2), color="#10B981"),
+    ])
+
     # Build final composition list from map
     composition: list[ReportCompositionItem] = []
     for (cat_key, group), info in comp_map.items():
@@ -919,7 +699,7 @@ async def get_income_expenses_report(
 
     # Top 6 + Other per group
     category_trend: list[CategoryTrendItem] = []
-    for group in ("expenses", "income"):
+    for group in ("expenses", "income", "business"):
         group_items = [
             (k, v) for (k, g), v in cat_trend_map.items() if g == group
         ]
@@ -973,7 +753,7 @@ async def get_income_expenses_report(
     for dp in trend:
         for (cat_key, group), info in cat_trend_map.items():
             v = info["periods"].get(dp.date, 0.0)
-            if v > 0:
+            if v > 0 or (group == "business" and v != 0):
                 dp.composition.append(ReportCompositionItem(
                     key=cat_key,
                     label=info["label"],

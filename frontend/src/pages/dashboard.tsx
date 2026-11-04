@@ -1,3 +1,5 @@
+import { IncomeBridge } from '@/components/income-bridge'
+import { savingsRate as calculateSavingsRate } from '@/lib/income-presentation'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { getAccountName } from '@/lib/account-utils'
 import { currentMonth, shiftMonth, monthLastDay, monthLabel, monthRange } from '@/lib/month-utils'
@@ -351,7 +353,7 @@ export default function DashboardPage() {
   // Savings rate & projection
   const income = Number(summary?.monthly_income_primary ?? summary?.monthly_income ?? 0)
   const expenses = Number(summary?.monthly_expenses_primary ?? summary?.monthly_expenses ?? 0)
-  const savingsRate = income > 0 ? ((income - expenses) / income) * 100 : 0
+  const savingsRate = calculateSavingsRate(income, expenses)
   const isCurrentMonth = selectedMonth === currentMonth()
   const daysElapsed = isCurrentMonth ? new Date().getDate() : monthLastDay(selectedMonth)
   const daysInMonth = monthLastDay(selectedMonth)
@@ -510,15 +512,15 @@ export default function DashboardPage() {
   const txListLoading = currentTxLoading || projectedTxLoading
 
   // Savings rate display
-  const savingsRateColor = income === 0 && expenses > 0
+  const savingsRateColor = income <= 0
     ? 'text-rose-500'
-    : savingsRate > 0
+    : savingsRate !== null && savingsRate > 0
       ? 'text-emerald-600'
-      : savingsRate < 0
+      : savingsRate !== null && savingsRate < 0
         ? 'text-rose-500'
         : 'text-muted-foreground'
 
-  const savingsRateDisplay = income === 0 && expenses > 0
+  const savingsRateDisplay = savingsRate === null
     ? '---'
     : `${savingsRate.toFixed(0)}%`
 
@@ -649,8 +651,8 @@ export default function DashboardPage() {
                 {summaryLoading ? (
                   <Skeleton className="h-7 w-24" />
                 ) : (
-                  <p className="text-lg font-bold tabular-nums text-emerald-600">
-                    +{mask(formatCurrency(income, primaryCurrency, locale))}
+                  <p className={`text-lg font-bold tabular-nums ${income < 0 ? 'text-rose-500' : 'text-emerald-600'}`}>
+                    {income > 0 ? '+' : ''}{mask(formatCurrency(income, primaryCurrency, locale))}
                   </p>
                 )}
               </div>
@@ -685,6 +687,12 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
+
+            {!summaryLoading && summary?.income_adjustment && (
+              <div className="mt-4 max-w-lg border-t border-border pt-3">
+                <IncomeBridge adjustment={summary.income_adjustment} />
+              </div>
+            )}
 
             {/* Spending projection */}
             {projectedSpend !== null && !summaryLoading && (
@@ -1321,6 +1329,7 @@ export default function DashboardPage() {
       </div>
 
       <TransactionDrillDown
+        cardIncomeAdjustment={drillDown?.type === 'credit' && drillDown.from === monthStart && drillDown.to === monthEnd && !drillDown.category_id && !drillDown.uncategorized && !drillDown.account_id && !drillDown.account_ids ? summary?.income_adjustment : undefined}
         filter={
           drillDown
             ? {

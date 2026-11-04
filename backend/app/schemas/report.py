@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from app.schemas.business_income import IncomeAdjustment
 
 
 class ReportBreakdown(BaseModel):
@@ -32,6 +33,7 @@ class ReportDataPoint(BaseModel):
 
 
 class ReportMeta(BaseModel):
+    income_adjustment: IncomeAdjustment | None = None
     type: str
     series_keys: list[str]
     currency: str

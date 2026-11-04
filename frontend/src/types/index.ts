@@ -88,7 +88,14 @@ export interface Category {
   is_system: boolean
   treat_as_transfer: boolean
   is_ignored: boolean
+  is_business: boolean
 }
+
+export type CategoryCreate = Pick<Category, 'name'> & Partial<Pick<
+  Category, 'group_id' | 'icon' | 'color' | 'treat_as_transfer' | 'is_ignored' | 'is_business'
+>>
+
+export type CategoryUpdate = Partial<CategoryCreate>
 
 export interface CategoryGroup {
   id: string
@@ -177,7 +184,22 @@ export interface Collection {
   wallet_count: number
 }
 
+export interface IncomeAdjustment {
+  gross_income: number
+  booked_income?: number
+  projected_income?: number
+  business_deduction: number
+  net_income: number
+  currency: string
+  missing_fx_count: number
+  nonbank: boolean
+  months: { month: string; debits: number; credits: number; deduction: number; missing_fx_count: number }[]
+}
+
 export interface AccountSummary {
+  // Managerial metrics only: existing monthly/cycle totals remain cash values.
+  income_adjustment?: IncomeAdjustment | null
+  personal_expenses?: number | null
   account_id: string
   current_balance: number
   monthly_income: number
@@ -509,6 +531,7 @@ export interface TransactionCalendarResponse {
 }
 
 export interface DashboardSummary {
+  income_adjustment?: IncomeAdjustment | null
   total_balance: Record<string, number>
   total_balance_primary: number
   balance_date: string
@@ -538,6 +561,7 @@ export interface SpendingByCategory {
 }
 
 export interface MonthlyTrend {
+  income_adjustment?: IncomeAdjustment | null
   month: string
   income: number
   expenses: number
@@ -727,6 +751,7 @@ export interface PaginatedResponse<T> {
 // Income / expense / net totals for all transactions matching the active
 // filters (issue #185) — accompanies the paginated /transactions response.
 export interface TransactionsSummary {
+  income_adjustment?: IncomeAdjustment | null
   income: number
   expense: number
   net: number
@@ -764,6 +789,7 @@ export interface ReportDataPoint {
 }
 
 export interface ReportMeta {
+  income_adjustment?: IncomeAdjustment | null
   type: string
   series_keys: string[]
   currency: string

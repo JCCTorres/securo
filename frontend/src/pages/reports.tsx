@@ -24,6 +24,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { PageHeader } from '@/components/page-header'
 import { CashflowSankey } from '@/components/reports/CashflowSankey'
+import { IncomeBridge } from '@/components/income-bridge'
+import { BUSINESS_COLOR, incomeCompositionBreakdowns } from '@/lib/income-presentation'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
 import { useCollectionFilter } from '@/contexts/collection-filter-context'
@@ -145,7 +147,7 @@ export default function ReportsPage() {
   const [interval, setInterval] = useState('monthly')
   const [activeTab, setActiveTab] = useState('net_worth')
   const [compositionView, setCompositionView] = useState<string>('netWorth')
-  const [sparklineView, setSparklineView] = useState<'byExpenses' | 'byIncome'>('byExpenses')
+  const [sparklineView, setSparklineView] = useState<'byExpenses' | 'byIncome' | 'business'>('byExpenses')
   const [sparklinePage, setSparklinePage] = useState(0)
   const [cashFlowBaseline, setCashFlowBaseline] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
@@ -234,8 +236,9 @@ export default function ReportsPage() {
     } as Record<string, string | number | null>
   })
 
-  const allBreakdowns = summary?.breakdowns ?? []
-  const breakdownData = allBreakdowns.filter((b) => b.value > 0)
+  const allBreakdowns = (summary?.breakdowns ?? []).map(b => b.key === 'businessDeduction' ? { ...b, color: BUSINESS_COLOR } : b)
+  // Negative income and refund reversals are real, not empty data.
+  const breakdownData = allBreakdowns.filter((b) => meta?.type === 'income_expenses' ? b.value !== 0 : b.value > 0)
 
   const colorMap: Record<string, string> = {}
   for (const b of allBreakdowns) {
@@ -263,7 +266,9 @@ export default function ReportsPage() {
         .filter((b) => b.value > 0)
     : null
 
-  const compositionBreakdownData = snapshotBreakdownData ?? breakdownData
+  const compositionBreakdownData = meta?.type === 'income_expenses'
+    ? incomeCompositionBreakdowns(snapshotTrendPoint?.composition ?? data?.composition ?? []).filter(b => b.value > 0)
+    : snapshotBreakdownData ?? breakdownData.filter(b => b.value > 0)
 
   const changePrefix = (summary?.change_amount ?? 0) >= 0 ? '+' : ''
   const changeColor = (summary?.change_amount ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-500'
@@ -282,7 +287,9 @@ export default function ReportsPage() {
   // Composition toggle options per report type
   const compositionOptions = activeTab === 'net_worth'
     ? ['netWorth', 'assetsAndAccounts', 'liabilities'] as const
-    : activeTab === 'income_expenses' || activeTab === 'cash_flow'
+    : activeTab === 'income_expenses'
+      ? ['net', 'byIncome', 'byExpenses', 'business'] as const
+      : activeTab === 'cash_flow'
       ? ['net', 'byIncome', 'byExpenses'] as const
       : ['summary', 'detailed'] as const
 
@@ -292,6 +299,7 @@ export default function ReportsPage() {
     if (compositionView === 'liabilities') return new Set(['liabilities'])
     if (compositionView === 'byIncome') return new Set(['income'])
     if (compositionView === 'byExpenses') return new Set(['expenses'])
+    if (compositionView === 'business') return new Set(['business'])
     return null
   })()
 
@@ -300,7 +308,9 @@ export default function ReportsPage() {
   // income/expense breakdowns under projected* keys, but composition items are
   // tagged with the plain group, so the two must be reconciled to line up.
   const groupOf = (key: string) =>
-    key === 'projectedIncome' ? 'income'
+    key === 'grossIncome' ? 'income'
+      : key === 'businessDeduction' ? 'business'
+      : key === 'projectedIncome' ? 'income'
       : key === 'projectedExpenses' ? 'expenses'
         : key
 
@@ -355,6 +365,7 @@ export default function ReportsPage() {
     )
 
     const itemLabel = (c: { label: string; key: string; group: string }) => {
+      if (c.group === 'business') return t('incomeBridge.businessGroup')
       if (c.key === 'uncategorized') {
         // Uncategorized income and uncategorized expenses are distinct buckets
         // that share a label — qualify them by group so they don't look duplicated.
@@ -382,7 +393,7 @@ export default function ReportsPage() {
       .map((c) => ({
         name: itemLabel(c),
         value: c.value,
-        color: activeTab === 'net_worth' ? (netWorthColorMap.get(c.key) ?? OTHER_SLICE_COLOR) : c.color,
+        color: c.group === 'business' ? BUSINESS_COLOR : activeTab === 'net_worth' ? (netWorthColorMap.get(c.key) ?? OTHER_SLICE_COLOR) : c.color,
         group: c.group,
       }))
   })()
@@ -617,6 +628,13 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      {!isLoading && meta?.income_adjustment && (
+        <div className="bg-card rounded-xl border border-border p-5 mb-5 max-w-xl">
+          <IncomeBridge adjustment={meta.income_adjustment} />
+          <p className="text-xs text-muted-foreground mt-2">{t('incomeBridge.reportNet')}</p>
+        </div>
+      )}
+
       {/* Flow (Sankey) */}
       {isMoneyMap && (
         <div className="bg-card rounded-xl border border-border shadow-sm mb-5">
@@ -624,7 +642,7 @@ export default function ReportsPage() {
             <p className="text-sm font-semibold text-foreground">
               {t('reports.moneyMap')}
             </p>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#10B981' }} />
                 <span className="text-[11px] text-muted-foreground">{t('reports.income')}</span>
@@ -638,8 +656,12 @@ export default function ReportsPage() {
                 <span className="text-[11px] text-muted-foreground">{t('reports.investments')}</span>
               </div>
               <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: BUSINESS_COLOR }} />
+                <span className="text-[11px] text-muted-foreground">{t('incomeBridge.businessGroup')}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#F59E0B' }} />
-                <span className="text-[11px] text-muted-foreground">{t('reports.deficit')}</span>
+                <span className="text-[11px] text-muted-foreground">{t('incomeBridge.fundingDeficit')}</span>
               </div>
             </div>
           </div>
@@ -655,6 +677,11 @@ export default function ReportsPage() {
 
       {!isMoneyMap && (
       <>
+      {snapshotTrendPoint?.composition?.some(c => c.group === 'business' && c.value < 0) && (
+        <p className="text-xs text-violet-600 dark:text-violet-400 mb-3">
+          {t('incomeBridge.refundReversal')}: {mask(formatCurrency(snapshotTrendPoint.composition.filter(c => c.group === 'business').reduce((sum, c) => sum + c.value, 0), userCurrency, locale))}
+        </p>
+      )}
       {/* Main Trend Chart */}
       <div className="bg-card rounded-xl border border-border shadow-sm mb-5">
         <div className="px-5 pt-5 pb-2 flex items-center justify-between">
@@ -1072,6 +1099,7 @@ export default function ReportsPage() {
                                 ? t(isHistoricalSnapshot ? 'reports.youOwed' : 'reports.youOwe', { defaultValue: isHistoricalSnapshot ? 'You Owed' : 'You Owe' })
                                 : compositionView === 'byIncome' ? t('reports.income')
                                 : compositionView === 'byExpenses' ? t('reports.expenses')
+                                : compositionView === 'business' ? t('incomeBridge.businessGroup')
                                 : meta?.type === 'income_expenses' ? t('reports.netIncome')
                                 : t(currentTab.labelKey)}
                           </span>
@@ -1185,7 +1213,7 @@ export default function ReportsPage() {
               )}
             </div>
             {meta?.type === 'income_expenses' && (() => {
-              const groupKey = sparklineView === 'byIncome' ? 'income' : 'expenses'
+              const groupKey = sparklineView === 'business' ? 'business' : sparklineView === 'byIncome' ? 'income' : 'expenses'
               const allItems = (data?.category_trend ?? []).filter((c) => c.group === groupKey)
               const totalPages = Math.ceil(allItems.length / 6)
               const hasPagination = totalPages > 1
@@ -1212,7 +1240,7 @@ export default function ReportsPage() {
                     </div>
                   )}
                   <div className="flex items-center rounded-lg border border-border bg-muted/30 overflow-hidden">
-                    {(['byExpenses', 'byIncome'] as const).map((opt) => (
+                    {(['byExpenses', 'byIncome', 'business'] as const).map((opt) => (
                       <button
                         key={opt}
                         onClick={() => { setSparklineView(opt); setSparklinePage(0) }}
@@ -1239,10 +1267,10 @@ export default function ReportsPage() {
                   ))}
                 </div>
               ) : (() => {
-                const groupKey = sparklineView === 'byIncome' ? 'income' : 'expenses'
-                const allGroupItems: CategoryTrendItem[] = (data?.category_trend ?? []).filter(
-                  (c) => c.group === groupKey
-                )
+                const groupKey = sparklineView === 'business' ? 'business' : sparklineView === 'byIncome' ? 'income' : 'expenses'
+                const allGroupItems: CategoryTrendItem[] = (data?.category_trend ?? [])
+                  .filter(c => c.group === groupKey)
+                  .map(c => c.group === 'business' ? { ...c, color: BUSINESS_COLOR, label: t('incomeBridge.businessGroup') } : c)
                 if (allGroupItems.length === 0) {
                   return (
                     <p className="text-muted-foreground text-sm text-center py-16">
@@ -1281,7 +1309,7 @@ export default function ReportsPage() {
                                   style={{ backgroundColor: item.color }}
                                 />
                                 <span className="text-[11px] text-muted-foreground truncate">
-                                  {item.key === 'uncategorized' ? t('reports.uncategorized') : item.key === 'other' ? t('reports.other') : item.label}
+                                  {item.group === 'business' ? t('incomeBridge.businessGroup') : item.key === 'uncategorized' ? t('reports.uncategorized') : item.key === 'other' ? t('reports.other') : item.label}
                                 </span>
                               </div>
                               <p className="text-xs font-bold tabular-nums text-foreground mb-1">

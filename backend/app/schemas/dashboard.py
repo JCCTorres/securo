@@ -1,9 +1,11 @@
 from typing import Optional
 
 from pydantic import BaseModel
+from app.schemas.business_income import IncomeAdjustment
 
 
 class DashboardSummary(BaseModel):
+    income_adjustment: Optional[IncomeAdjustment] = None
     total_balance: dict[str, float]  # currency -> amount
     total_balance_primary: float = 0.0  # consolidated in primary currency
     balance_date: str  # ISO date string, e.g. "2026-03-02"
@@ -35,6 +37,7 @@ class SpendingByCategory(BaseModel):
 
 
 class MonthlyTrend(BaseModel):
+    income_adjustment: Optional[IncomeAdjustment] = None
     month: str  # "2026-01"
     income: float
     expenses: float

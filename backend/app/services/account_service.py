@@ -12,7 +12,8 @@ from app.models.bank_connection import BankConnection
 from app.models.credit_card_bill import CreditCardBill
 from app.models.transaction import Transaction
 from app.schemas.account import AccountCreate, AccountUpdate
-from app.services._query_filters import counts_as_pnl
+from app.services._query_filters import counts_as_pnl, counts_as_personal_pnl
+from app.services.business_income_service import get_business_adjustment
 from app.services.credit_card_service import apply_effective_date, compute_available_credit, get_cycle_dates
 from app.models.category import Category
 
@@ -781,8 +782,27 @@ async def get_account_summary(
         )
     monthly_expenses = float(expenses_result.scalar())
 
+    # Keep bank/cycle cash totals above intact. The additive personal bridge
+    # is explicitly managerial, in account currency, and scoped to these rows.
+    from app.models.user import User
+    owner = await session.get(User, account.user_id)
+    personal = (await session.execute(_scope(select(
+        func.sum(case((Transaction.type == "credit", effective_amount), else_=0)),
+        func.sum(case((Transaction.type == "debit", effective_amount), else_=0)),
+    ).where(Transaction.account_id == account_id,
+            Transaction.source.not_in(["opening_balance", "settlement"]),
+            Transaction.status == "posted", counts_as_personal_pnl())))).one()
+    business = await get_business_adjustment(
+        session, workspace_id, account.user_id, None, None, account.currency,
+        account_ids=[account_id], exclude_closed=False,
+        transaction_ids=_scope(select(Transaction.id).where(Transaction.account_id == account_id)),
+        date_column=bucket_date, stored_currency=owner.primary_currency if owner else None,
+    )
+
     return {
         "account_id": account_id,
+        "income_adjustment": business.bridge(float(personal[0] or 0)),
+        "personal_expenses": float(personal[1] or 0),
         "current_balance": current_balance,
         "monthly_income": monthly_income,
         "monthly_expenses": monthly_expenses,

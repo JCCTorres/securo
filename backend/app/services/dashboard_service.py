@@ -26,6 +26,7 @@ from app.services.recurring_transaction_service import get_occurrences_in_range
 from app.services.asset_service import get_asset_values_at
 from app.services.fx_rate_service import convert
 from app.models.user import User
+from app.services.business_income_service import get_business_adjustment
 
 
 def _month_range(month: date) -> tuple[date, date]:
@@ -44,6 +45,7 @@ async def _get_recurring_projections(
     month_start: date,
     month_end: date,
     account_ids: Optional[list[uuid.UUID]] = None,
+    personal_only: bool = False,
 ) -> list[dict]:
     """Compute virtual recurring transaction projections for a month.
     Pure read — no DB writes. Returns list of dicts with category_id, amount, type, currency.
@@ -71,6 +73,9 @@ async def _get_recurring_projections(
     )
     if account_ids:
         stmt = stmt.where(RecurringTransaction.account_id.in_(account_ids))
+    if personal_only:
+        stmt = stmt.where(or_(RecurringTransaction.category_id.is_(None),
+                              Category.is_business.is_not(True)))
     result = await session.execute(stmt)
     recurring_list = list(result.scalars().all())
 
@@ -208,7 +213,7 @@ async def get_summary(
 
     # Add virtual recurring projections
     projections = await _get_recurring_projections(
-        session, workspace_id, month_start, month_end, account_ids
+        session, workspace_id, month_start, month_end, account_ids, personal_only=True
     )
     for proj in projections:
         if proj["type"] == "credit":
@@ -279,103 +284,19 @@ async def get_summary(
     monthly_income_primary = real_monthly_income
     monthly_expenses_primary = abs(real_monthly_expenses)
 
-    # Use amount_primary sums for more accurate multi-currency income/expenses.
-    # Same posted-only rule as the native-currency totals above.
-    primary_result = await session.execute(
-        select(
-            func.sum(case((Transaction.type == "credit", Transaction.amount_primary), else_=0)),
-            func.sum(case((Transaction.type == "debit", Transaction.amount_primary), else_=0)),
-        )
-        .join(Account, Transaction.account_id == Account.id)
-        .where(
-            Transaction.workspace_id == workspace_id,
-            Account.is_closed == False,
-            report_date >= month_start,
-            report_date < month_end,
-            Transaction.source != "opening_balance",
-            Transaction.status == "posted",
-            counts_as_user_pnl(),
-            Transaction.amount_primary.isnot(None),
-            *acct_filter,
-        )
+    from app.services.personal_pnl_service import get_personal_pnl_rows
+    pnl_rows = await get_personal_pnl_rows(
+        session, workspace_id, user_id, primary_currency, month_start, month_end,
+        accounting_mode, account_ids,
     )
-    primary_row = primary_result.one()
-    if primary_row[0] is not None or primary_row[1] is not None:
-        monthly_income_primary = float(primary_row[0] or 0)
-        monthly_expenses_primary = abs(float(primary_row[1] or 0))
-
-    if not filtered:
-        # Apply share-only offset in primary currency (FX-converted).
-        own_offset_inc_pri, own_offset_exp_pri = await owner_split_offset_pnl(
-            session,
-            user_id,
-            month_start,
-            month_end,
-            use_effective_date=False,
-            primary_currency=primary_currency,
-            workspace_id=workspace_id,
-        )
-        monthly_income_primary -= own_offset_inc_pri
-        monthly_expenses_primary -= own_offset_exp_pri
-
-    # Add the viewer's shared shares to primary totals too. The shares
-    # are stored in the parent transaction's currency, so we convert
-    # each currency bucket separately rather than re-using shared_income
-    # / shared_expenses (which were summed without conversion).
-    # Gated under a collection filter — those parent transactions live in
-    # other users'/workspaces' accounts, outside the filtered account set.
-    if not filtered:
-        from app.models.group import GroupMember
-        from app.models.transaction_split import TransactionSplit
-
-        viewer_member_ids = select(GroupMember.id).where(
-            GroupMember.linked_user_id == user_id,
-            GroupMember.is_self.is_(False),
-        )
-        shared_currency_rows = await session.execute(
-            select(
-                Transaction.currency,
-                func.sum(
-                    case(
-                        (Transaction.type == "credit", TransactionSplit.share_amount),
-                        else_=0,
-                    )
-                ),
-                func.sum(
-                    case(
-                        (Transaction.type == "debit", TransactionSplit.share_amount),
-                        else_=0,
-                    )
-                ),
-            )
-            .select_from(TransactionSplit)
-            .join(Transaction, TransactionSplit.transaction_id == Transaction.id)
-            .where(
-                TransactionSplit.group_member_id.in_(viewer_member_ids),
-                Transaction.user_id != user_id,
-                Transaction.source != "opening_balance",
-                report_date >= month_start,
-                report_date < month_end,
-                counts_as_user_pnl(),
-            )
-            .group_by(Transaction.currency)
-        )
-        for row in shared_currency_rows.all():
-            cur = row[0]
-            in_credit = float(row[1] or 0)
-            in_debit = float(row[2] or 0)
-            if in_credit:
-                credit_pri, _ = await convert(
-                    session, Decimal(str(in_credit)), cur, primary_currency
-                )
-                monthly_income_primary += float(credit_pri)
-            if in_debit:
-                debit_pri, _ = await convert(
-                    session, Decimal(str(in_debit)), cur, primary_currency
-                )
-                monthly_expenses_primary += abs(float(debit_pri))
+    monthly_income_primary = sum(float(amount) for tx, _, amount in pnl_rows
+                                 if tx.type == "credit" and amount is not None)
+    monthly_expenses_primary = sum(float(amount) for tx, _, amount in pnl_rows
+                                   if tx.type == "debit" and amount is not None)
+    missing_fx_count = sum(amount is None for _, _, amount in pnl_rows)
 
     # Add recurring projections to primary totals (convert each)
+    projected_income_primary = 0.0
     for proj in projections:
         proj_converted, _ = await convert(
             session, Decimal(str(proj["amount"])),
@@ -383,6 +304,7 @@ async def get_summary(
         )
         if proj["type"] == "credit":
             monthly_income_primary += float(proj_converted)
+            projected_income_primary += float(proj_converted)
         else:
             monthly_expenses_primary += float(proj_converted)
 
@@ -397,7 +319,21 @@ async def get_summary(
         )
     )
 
+    business = await get_business_adjustment(
+        session, workspace_id, user_id, month_start, month_end, primary_currency,
+        accounting_mode, account_ids,
+    )
+    income_adjustment = business.bridge(
+        monthly_income_primary, projected_income=projected_income_primary,
+        missing_fx_count=missing_fx_count,
+    )
+    monthly_income_primary = income_adjustment.net_income
+    if business.months:
+        # The primary-currency bridge is authoritative for mixed currencies.
+        monthly_income = monthly_income_primary
+
     return DashboardSummary(
+        income_adjustment=income_adjustment,
         total_balance=total_balance,
         total_balance_primary=round(total_balance_primary, 2),
         balance_date=cutoff.isoformat(),
@@ -598,7 +534,7 @@ async def get_spending_by_category(
 
     # Add virtual recurring projections (debit only), converted to primary currency
     projections = await _get_recurring_projections(
-        session, workspace_id, month_start, month_end, account_ids
+        session, workspace_id, month_start, month_end, account_ids, personal_only=True
     )
     # We need category info for recurring projections — fetch categories
     cat_cache: dict[str, dict] = {}
@@ -658,71 +594,41 @@ async def get_monthly_trend(
     months: int = 6,
     account_ids: Optional[list[uuid.UUID]] = None,
 ) -> list[MonthlyTrend]:
-    filtered = account_ids is not None
-    acct_filter = [Transaction.account_id.in_(account_ids)] if filtered else []
+    from app.services.personal_pnl_service import get_personal_pnl_rows
     accounting_mode = await get_credit_card_accounting_mode(session)
-    report_date = reporting_date_col(accounting_mode)
-    month_label = func.to_char(report_date, 'YYYY-MM').label('month')
-    primary_amt = _primary_amount_expr()
-    result = await session.execute(
-        select(
-            month_label,
-            func.sum(case((Transaction.type == "credit", primary_amt), else_=0)),
-            func.sum(case((Transaction.type == "debit", primary_amt), else_=0)),
-        )
-        .join(Account, Transaction.account_id == Account.id)
-        .where(
-            Transaction.workspace_id == workspace_id,
-            Account.is_closed == False,
-            Transaction.source != "opening_balance",
-            counts_as_user_pnl(),
-            *acct_filter,
-        )
-        .group_by(month_label)
-        .order_by(month_label.desc())
-        .limit(months)
-    )
-
     user = await session.get(User, user_id)
     primary_currency = user.primary_currency if user else get_settings().default_currency
-
-    trends_raw: list[tuple[str, float, float]] = []
-    for row in result.all():
-        trends_raw.append((row[0], float(row[1] or 0), abs(float(row[2] or 0))))
-
-    # Subtract owner non-owner-share offsets per month, and add the
-    # viewer's shares of others' splits.
-    adjusted: list[MonthlyTrend] = []
-    for month_str, income, expenses in trends_raw:
-        year, mnum = month_str.split("-")
-        m_start = date(int(year), int(mnum), 1)
-        m_end = (
-            date(int(year), int(mnum) + 1, 1)
-            if int(mnum) < 12
-            else date(int(year) + 1, 1, 1)
-        )
-        if filtered:
-            own_inc, own_exp, shared_inc, shared_exp = 0.0, 0.0, 0.0, 0.0
+    rows = await get_personal_pnl_rows(
+        session, workspace_id, user_id, primary_currency,
+        accounting_mode=accounting_mode, account_ids=account_ids,
+    )
+    raw_by_month: dict[str, list[float]] = {}
+    missing_by_month: dict[str, int] = {}
+    for tx, day, amount in rows:
+        month = day.strftime("%Y-%m")
+        totals = raw_by_month.setdefault(month, [0.0, 0.0])
+        if amount is None:
+            missing_by_month[month] = missing_by_month.get(month, 0) + 1
         else:
-            own_inc, own_exp = await owner_split_offset_pnl(
-                session, user_id, m_start, m_end,
-                use_effective_date=accounting_mode == "accrual",
-                primary_currency=primary_currency,
-                workspace_id=workspace_id,
-            )
-            shared_inc, shared_exp = await viewer_shared_pnl(
-                session, user_id, m_start, m_end,
-                use_effective_date=accounting_mode == "accrual",
-                primary_currency=primary_currency,
-            )
-        adjusted.append(
-            MonthlyTrend(
-                month=month_str,
-                income=max(0.0, income - own_inc + shared_inc),
-                expenses=max(0.0, expenses - own_exp + shared_exp),
-            )
+            totals[0 if tx.type == "credit" else 1] += float(amount)
+    business = await get_business_adjustment(
+        session, workspace_id, user_id, None, None, primary_currency,
+        accounting_mode, account_ids,
+    )
+    for item in business.months:
+        raw_by_month.setdefault(item.month, [0.0, 0.0])
+    adjusted: list[MonthlyTrend] = []
+    for month in sorted(raw_by_month, reverse=True)[:months]:
+        start = date.fromisoformat(month + "-01")
+        _, end = _month_range(start)
+        cost = await get_business_adjustment(
+            session, workspace_id, user_id, start, end, primary_currency,
+            accounting_mode, account_ids,
         )
-
+        income, expenses = raw_by_month[month]
+        bridge = cost.bridge(income, missing_fx_count=missing_by_month.get(month, 0))
+        adjusted.append(MonthlyTrend(month=month, income=bridge.net_income,
+                                     income_adjustment=bridge, expenses=expenses))
     return list(reversed(adjusted))
 
 

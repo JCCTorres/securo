@@ -16,3 +16,12 @@ export function invalidateFinancialQueries(queryClient: QueryClient) {
   queryClient.invalidateQueries({ queryKey: ['reports'] })
   queryClient.invalidateQueries({ queryKey: ['drill-down'] })
 }
+
+// Classification changes affect existing transactions without a bank resync.
+// Both category-group spellings are in use by category selectors.
+export function invalidateCategoryQueries(queryClient: QueryClient) {
+  queryClient.invalidateQueries({ queryKey: ['categories'] })
+  queryClient.invalidateQueries({ queryKey: ['category-groups'] })
+  queryClient.invalidateQueries({ queryKey: ['categoryGroups'] })
+  invalidateFinancialQueries(queryClient)
+}

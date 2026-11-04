@@ -13,12 +13,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import type { Category, CategoryGroup } from '@/types'
+import type { Category, CategoryCreate, CategoryUpdate, CategoryGroup } from '@/types'
 import { Pencil, Trash2, Plus, ChevronDown, ChevronRight, ChevronsUpDown } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
 import { CategoryIcon } from '@/components/category-icon'
 import { IconPicker } from '@/components/icon-picker'
 import { useWorkspace } from '@/contexts/workspace-context'
+import { invalidateCategoryQueries } from '@/lib/invalidate-queries'
 
 function SectionCard({ children }: { children: React.ReactNode }) {
   return (
@@ -49,6 +50,7 @@ export default function CategoriesPage() {
   const [formColor, setFormColor] = useState('#6366f1')
   const [formTreatAsTransfer, setFormTreatAsTransfer] = useState(false)
   const [formIgnoreTransfer, setFormIgnoreTransfer] = useState(false)
+  const [formBusiness, setFormBusiness] = useState(false)
   const [groupDialogOpen, setGroupDialogOpen] = useState(false)
   const [editingGroup, setEditingGroup] = useState<CategoryGroup | null>(null)
   const [groupFormIcon, setGroupFormIcon] = useState('folder')
@@ -66,16 +68,15 @@ export default function CategoriesPage() {
   })
 
   const invalidateAll = () => {
-    queryClient.invalidateQueries({ queryKey: ['categories'] })
-    queryClient.invalidateQueries({ queryKey: ['category-groups'] })
+    invalidateCategoryQueries(queryClient)
   }
 
   const createCatMutation = useMutation({
-    mutationFn: (cat: Partial<Category>) => categoriesApi.create(cat),
+    mutationFn: (cat: CategoryCreate) => categoriesApi.create(cat),
     onSuccess: () => { invalidateAll(); setCatDialogOpen(false); toast.success(t('categories.created')) },
   })
   const updateCatMutation = useMutation({
-    mutationFn: ({ id, ...data }: Partial<Category> & { id: string }) => categoriesApi.update(id, data),
+    mutationFn: ({ id, ...data }: CategoryUpdate & { id: string }) => categoriesApi.update(id, data),
     onSuccess: () => { invalidateAll(); setCatDialogOpen(false); setEditingCat(null); toast.success(t('categories.updated')) },
   })
   const deleteCatMutation = useMutation({
@@ -113,6 +114,8 @@ export default function CategoriesPage() {
     setFormIcon(cat?.icon ?? 'circle-help')
     setFormColor(cat?.color ?? '#6366f1')
     setFormTreatAsTransfer(cat?.treat_as_transfer ?? false)
+    setFormIgnoreTransfer(cat?.is_ignored ?? false)
+    setFormBusiness(cat?.is_business ?? false)
     setCatDialogOpen(true)
   }
 
@@ -128,6 +131,14 @@ export default function CategoriesPage() {
       <CategoryIcon icon={cat.icon} color={cat.color} size="md" />
       <div className="flex-1 min-w-0 flex items-center gap-2">
         <span className="text-sm font-medium text-foreground truncate">{cat.name}</span>
+        {cat.is_business && (
+          <span
+            className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border shrink-0"
+            title={t('categories.businessDesc')}
+          >
+            {t('categories.business')}
+          </span>
+        )}
         {cat.treat_as_transfer && (
           <span
             className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border shrink-0"
@@ -279,7 +290,8 @@ export default function CategoriesPage() {
                 color: formData.get('color') as string,
                 group_id: (formData.get('group_id') as string) || null,
                 treat_as_transfer: formTreatAsTransfer,
-                is_ignored: formIgnoreTransfer
+                is_ignored: formIgnoreTransfer,
+                is_business: formBusiness,
               }
               if (editingCat) {
                 updateCatMutation.mutate({ id: editingCat.id, ...data })
@@ -317,6 +329,19 @@ export default function CategoriesPage() {
                 <input type="hidden" name="icon" value={formIcon} />
               </div>
               <div className="pt-2 border-t border-border">
+                <label className="flex items-start gap-3 cursor-pointer mb-3">
+                  <input
+                    type="checkbox"
+                    checked={formBusiness}
+                    onChange={(e) => setFormBusiness(e.target.checked)}
+                    aria-describedby="category-business-description"
+                    className="h-4 w-4 mt-0.5 rounded border-border shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-foreground">{t('categories.business')}</span>
+                    <p id="category-business-description" className="text-xs text-muted-foreground mt-0.5">{t('categories.businessDesc')}</p>
+                  </div>
+                </label>
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
                     type="checkbox"
